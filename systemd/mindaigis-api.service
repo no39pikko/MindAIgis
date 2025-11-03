@@ -1,0 +1,28 @@
+[Unit]
+Description=MindAIgis FastAPI Service
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=mindaigis
+Group=mindaigis
+WorkingDirectory=/opt/mindaigis
+Environment="PATH=/opt/mindaigis/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/mindaigis/.env
+
+ExecStart=/opt/mindaigis/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+Restart=always
+RestartSec=10
+
+# ログ設定
+StandardOutput=append:/opt/mindaigis/logs/api.log
+StandardError=append:/opt/mindaigis/logs/api-error.log
+
+# セキュリティ設定
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

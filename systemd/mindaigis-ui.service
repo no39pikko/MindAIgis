@@ -1,0 +1,28 @@
+[Unit]
+Description=MindAIgis Streamlit UI Service
+After=network.target mindaigis-api.service
+Requires=mindaigis-api.service
+
+[Service]
+Type=simple
+User=mindaigis
+Group=mindaigis
+WorkingDirectory=/opt/mindaigis
+Environment="PATH=/opt/mindaigis/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/mindaigis/.env
+
+ExecStart=/opt/mindaigis/venv/bin/streamlit run ui/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+
+Restart=always
+RestartSec=10
+
+# ログ設定
+StandardOutput=append:/opt/mindaigis/logs/streamlit.log
+StandardError=append:/opt/mindaigis/logs/streamlit-error.log
+
+# セキュリティ設定
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
