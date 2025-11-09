@@ -46,3 +46,8 @@ logs/
 
 # Streamlit
 .streamlit/
+
+# PID files
+*.pid
+.api.pid
+.streamlit.pid
