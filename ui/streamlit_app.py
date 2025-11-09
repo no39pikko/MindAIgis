@@ -322,8 +322,13 @@ def display_results(result: dict):
     recommendations = result.get("recommendations", "")
     tickets = result.get("analyzed_tickets", [])
     tickets_found = result.get("tickets_found", 0)
-    strategies = result.get("search_strategies", [])
+    enhanced_query = result.get("enhanced_query", "")
     relationships = result.get("relationships", {})
+
+    # 検索クエリ表示（デバッグ情報）
+    if enhanced_query:
+        with st.expander("🔍 検索クエリ（デバッグ情報）", expanded=False):
+            st.code(enhanced_query, language="text")
 
     # 統計情報
     st.markdown(f"""
@@ -333,8 +338,8 @@ def display_results(result: dict):
             <div class="stat-label">見つかったチケット</div>
         </div>
         <div class="stat-box">
-            <div class="stat-value">{len(strategies)}</div>
-            <div class="stat-label">検索視点</div>
+            <div class="stat-value">{len(tickets)}</div>
+            <div class="stat-label">分析済みチケット</div>
         </div>
         <div class="stat-box">
             <div class="stat-value">{len(relationships.get('related', []))}</div>

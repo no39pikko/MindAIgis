@@ -1,8 +1,7 @@
 """
 手順書作成補佐サービス（Phase 3）
 
-Redmineチケットの具体的な内容を深く分析し、
-手順書作成に必要な情報を柔軟かつインテリジェントに提供する。
+Consensus/ChatGPT風のシンプルで効果的な検索アプローチ
 """
 
 import re
@@ -25,6 +24,11 @@ class ProcedureAssistantService:
         """
         手順書作成を補佐
 
+        シンプルなアプローチ:
+        1. ユーザーのクエリを使ってベクトル検索（threshold低め）
+        2. 取得したチケットをLLMで深く分析
+        3. 具体的な推奨を生成
+
         Args:
             query: 作業内容
             context: 追加コンテキスト（オプション）
@@ -35,37 +39,40 @@ class ProcedureAssistantService:
         print(f"\n=== 手順書作成補佐 ===")
         print(f"Query: {query}")
 
-        # 1. 検索戦略を生成
-        print("\n[1/5] 検索戦略を生成中...")
-        strategies = self._generate_search_strategies(query, context)
-        print(f"  生成された戦略: {len(strategies)}個")
+        # クエリを拡張（LLMで検索に適した形に）
+        print("\n[1/4] 検索クエリを最適化中...")
+        enhanced_query = self._enhance_query(query, context)
+        print(f"  最適化クエリ: {enhanced_query}")
 
-        # 2. マルチ視点検索
-        print("\n[2/5] マルチ視点検索を実行中...")
-        all_tickets = self._multi_perspective_search(strategies)
-        print(f"  取得チケット数: {len(all_tickets)}件")
+        # シンプルなベクトル検索（threshold低めで広く取得）
+        print("\n[2/4] チケットを検索中...")
+        tickets = self._search_tickets(enhanced_query, limit=20)
+        print(f"  取得チケット数: {len(tickets)}件")
 
-        # 3. チケット関係性分析
-        print("\n[3/5] チケット関係性を分析中...")
-        if all_tickets:
-            ticket_ids = {t.get("ticket_id") for t in all_tickets}
+        # チケットがない場合はフォールバック検索
+        if len(tickets) == 0:
+            print("  → 検索範囲を拡大中...")
+            tickets = self._fallback_search(query, context)
+            print(f"  フォールバック検索結果: {len(tickets)}件")
+
+        # 関係性分析（取得できた場合のみ）
+        relationships = {"related": [], "parent_child": {}, "references": {}}
+        if tickets:
+            print("\n[3/4] チケット関係性を分析中...")
+            ticket_ids = {t.get("ticket_id") for t in tickets}
             relationships = self._analyze_relationships(ticket_ids)
-            print(f"  関連チケット: {len(relationships.get('related', []))}件")
-        else:
-            relationships = {"related": [], "parent_child": {}, "references": {}}
 
-        # 4. 深い分析（LLMによる具体的な内容把握）
-        print("\n[4/5] チケット内容を深く分析中...")
-        analyzed_tickets = self._deep_analyze_tickets(all_tickets, query, context)
+        # LLMで深い分析
+        print("\n[4/4] チケット内容を深く分析中...")
+        analyzed_tickets = self._deep_analyze_tickets(tickets, query, context)
 
-        # 5. インテリジェントな推奨を生成
-        print("\n[5/5] 推奨事項を生成中...")
-        recommendations = self._generate_intelligent_recommendations(
+        # 総合的な推奨を生成
+        recommendations = self._generate_recommendations(
             query=query,
             context=context,
             tickets=analyzed_tickets,
-            strategies=strategies,
-            relationships=relationships
+            relationships=relationships,
+            enhanced_query=enhanced_query
         )
 
         print("\n=== 補佐完了 ===\n")
@@ -73,49 +80,34 @@ class ProcedureAssistantService:
         return {
             "query": query,
             "context": context,
-            "search_strategies": strategies,
-            "tickets_found": len(all_tickets),
+            "enhanced_query": enhanced_query,
+            "tickets_found": len(tickets),
             "analyzed_tickets": analyzed_tickets,
             "relationships": relationships,
             "recommendations": recommendations
         }
 
-    def _generate_search_strategies(self, query: str, context: Optional[str] = None) -> List[Dict]:
+    def _enhance_query(self, query: str, context: Optional[str] = None) -> str:
         """
-        タスクに基づいて複数の検索戦略を生成
+        検索クエリを最適化（LLMで拡張）
         """
         context_str = f"\n\n追加コンテキスト: {context}" if context else ""
 
-        prompt = f"""以下の作業について、Redmineチケットを検索する戦略を考えてください。
+        prompt = f"""以下の作業について、Redmineチケットを検索するための最適なクエリを1つ生成してください。
 
 【作業内容】
 {query}{context_str}
 
-複数の視点から検索することで、漏れなく関連情報を収集したい。以下の視点を考慮してください：
+検索クエリの要件:
+- 類似チケットが引っかかるように、キーワードを含める
+- 具体的すぎず、広すぎず
+- 日本語の自然な文で
+- 100文字以内
 
-1. 直近の同じ作業・類似作業（最も重要）
-2. 完了した過去の事例
-3. 関連するトラブルや失敗事例
-4. 既存システムの設定情報
-5. 関連する別の作業
-
-各検索戦略について以下を出力してください：
-- perspective: 検索視点の名前
-- search_query: 検索に使うクエリ
-- limit: 期待する件数
-- priority: high/medium/low
-
-JSON配列形式で出力してください。
+JSON形式で出力:
 ```json
 {{
-  "strategies": [
-    {{
-      "perspective": "視点名",
-      "search_query": "検索クエリ",
-      "limit": 10,
-      "priority": "high"
-    }}
-  ]
+  "enhanced_query": "最適化された検索クエリ"
 }}
 ```
 """
@@ -130,75 +122,72 @@ JSON配列形式で出力してください。
 
             import json
             result = json.loads(response.choices[0].message.content)
-
-            strategies = result.get("strategies", [])
-            if not strategies:
-                # フォールバック
-                strategies = [
-                    {
-                        "perspective": "類似作業",
-                        "search_query": query,
-                        "limit": 10,
-                        "priority": "high"
-                    }
-                ]
-
-            return strategies
+            return result.get("enhanced_query", query)
 
         except Exception as e:
-            print(f"  検索戦略生成エラー: {e}")
-            return [
-                {
-                    "perspective": "類似作業",
-                    "search_query": query,
-                    "limit": 10,
-                    "priority": "high"
-                }
-            ]
+            print(f"  クエリ最適化エラー: {e}")
+            # フォールバック: 元のクエリをそのまま使う
+            return query
 
-    def _multi_perspective_search(self, strategies: List[Dict]) -> List[Dict]:
+    def _search_tickets(self, query: str, limit: int = 20) -> List[Dict]:
         """
-        複数の視点で検索を実行し、重複を除いて統合
+        シンプルなベクトル検索（threshold低め）
         """
-        seen_ticket_ids = set()
-        all_tickets = []
+        try:
+            # score_threshold を 0.3 に下げて広く取得
+            tickets = self.vector_service.search_similar_tickets(
+                alert_message=query,
+                limit=limit,
+                score_threshold=0.3  # 低めに設定
+            )
 
-        for strategy in strategies:
-            search_query = strategy.get("search_query", "")
-            limit = strategy.get("limit", 5)
-            perspective = strategy.get("perspective", "")
+            # Redmineから詳細取得
+            enriched = []
+            for ticket in tickets:
+                ticket_id = ticket.get("ticket_id")
+                detail = self.redmine_service.get_ticket_details_with_comments(ticket_id)
+                if detail:
+                    enriched.append({
+                        **ticket,
+                        **detail
+                    })
 
-            try:
-                # ベクトル検索
-                tickets = self.vector_service.search_similar_tickets(
-                    alert_message=search_query,
-                    limit=limit
-                )
+            return enriched
 
-                # Redmineから詳細取得
-                for ticket in tickets:
-                    ticket_id = ticket.get("ticket_id")
+        except Exception as e:
+            print(f"  検索エラー: {e}")
+            return []
 
-                    # 重複スキップ
-                    if ticket_id in seen_ticket_ids:
-                        continue
+    def _fallback_search(self, query: str, context: Optional[str]) -> List[Dict]:
+        """
+        フォールバック検索（threshold=0で全件取得して後でフィルタ）
+        """
+        try:
+            # threshold=0 で全件取得
+            all_tickets = self.vector_service.search_similar_tickets(
+                alert_message=query,
+                limit=50,
+                score_threshold=0.0  # 全件取得
+            )
 
-                    seen_ticket_ids.add(ticket_id)
+            print(f"  全件検索結果: {len(all_tickets)}件")
 
-                    detail = self.redmine_service.get_ticket_details_with_comments(ticket_id)
-                    if detail:
-                        all_tickets.append({
-                            **ticket,
-                            **detail,
-                            "found_by_perspective": perspective
-                        })
+            # Redmineから詳細取得
+            enriched = []
+            for ticket in all_tickets[:10]:  # 上位10件
+                ticket_id = ticket.get("ticket_id")
+                detail = self.redmine_service.get_ticket_details_with_comments(ticket_id)
+                if detail:
+                    enriched.append({
+                        **ticket,
+                        **detail
+                    })
 
-                print(f"  {perspective}: {len(tickets)}件")
+            return enriched
 
-            except Exception as e:
-                print(f"  {perspective}の検索エラー: {e}")
-
-        return all_tickets
+        except Exception as e:
+            print(f"  フォールバック検索エラー: {e}")
+            return []
 
     def _analyze_relationships(self, ticket_ids: Set[int]) -> Dict:
         """
@@ -210,7 +199,7 @@ JSON配列形式で出力してください。
             "references": {}
         }
 
-        for ticket_id in ticket_ids:
+        for ticket_id in list(ticket_ids)[:10]:  # 最大10件まで
             try:
                 issue = self.redmine_service.get_ticket(ticket_id)
                 if not issue:
@@ -251,20 +240,15 @@ JSON配列形式で出力してください。
 
     def _deep_analyze_tickets(self, tickets: List[Dict], query: str, context: Optional[str]) -> List[Dict]:
         """
-        LLMで各チケットを深く分析
-        - 具体的な作業内容の把握
-        - 注意すべき点の抽出
-        - トラブルや失敗の記録
-        - 設定値や手順の参照
+        LLMで各チケットを深く分析し、重要度順にソート
         """
         analyzed = []
 
-        for ticket in tickets:
+        for ticket in tickets[:10]:  # 最大10件を詳細分析
             ticket_id = ticket.get("ticket_id")
             subject = ticket.get("subject", "")
             description = ticket.get("description", "")
             comments = ticket.get("comments", [])
-            status = ticket.get("status", "")
 
             # チケット全体を要約
             summary = self._summarize_ticket_content(
@@ -306,7 +290,7 @@ JSON配列形式で出力してください。
         comments_text = ""
         if comments:
             comments_parts = []
-            for idx, c in enumerate(comments[:10], 1):  # 最大10コメント
+            for idx, c in enumerate(comments[:10], 1):
                 user = c.get("user", "不明")
                 notes = c.get("notes", "")
                 if notes:
@@ -417,17 +401,16 @@ JSON形式で出力:
             print(f"  チケット#{ticket_id}の重要度評価エラー: {e}")
             return {"score": 50, "reason": "評価できませんでした"}
 
-    def _generate_intelligent_recommendations(
+    def _generate_recommendations(
         self,
         query: str,
         context: Optional[str],
         tickets: List[Dict],
-        strategies: List[Dict],
-        relationships: Dict
+        relationships: Dict,
+        enhanced_query: str
     ) -> str:
         """
-        全体を俯瞰して、インテリジェントな推奨を生成
-        チケットの具体的な内容を引用しながら、柔軟かつ自然な文章で説明
+        総合的な推奨を生成（Consensus/ChatGPT風）
         """
         if not tickets:
             return self._generate_no_results_recommendation(query, context)
@@ -440,7 +423,7 @@ JSON形式で出力:
 重要度: {ticket.get('importance_score')}/100
 理由: {ticket.get('importance_reason')}
 要約: {ticket.get('ai_summary')}
-主なポイント: {', '.join(ticket.get('key_points', [])[:3])}
+主なポイント: {', '.join(ticket.get('key_points', [])[:3]) if ticket.get('key_points') else 'なし'}
 注意点: {', '.join(ticket.get('cautions', [])[:2]) if ticket.get('cautions') else 'なし'}
 """
             top_tickets_info.append(info.strip())
@@ -455,8 +438,11 @@ JSON形式で出力:
 【作業内容】
 {query}{context_str}
 
-【実行した検索】
-{len(strategies)}つの視点から検索し、{len(tickets)}件のチケットを見つけました。
+【検索クエリ】
+{enhanced_query}
+
+【見つかったチケット】
+{len(tickets)}件のチケットを見つけました。
 
 【重要なチケット（上位5件）】
 {tickets_summary}
@@ -471,7 +457,7 @@ JSON形式で出力:
 2. 最も重要なチケットとその具体的な内容
 3. 注意すべき点やトラブル事例（チケットの具体的な内容を引用）
 4. 参照すべき情報（設定値、既存システムなど）
-5. 検索結果が少ない場合の代替アプローチ
+5. 次に確認すべきこと
 
 要求:
 - テンプレート的な文章ではなく、チケットの具体的な内容を踏まえた自然な説明
@@ -499,7 +485,7 @@ JSON形式で出力:
 
     def _generate_no_results_recommendation(self, query: str, context: Optional[str]) -> str:
         """
-        検索結果がない場合の柔軟な推奨
+        検索結果がない場合の推奨
         """
         context_str = f"\n\n追加コンテキスト: {context}" if context else ""
 
