@@ -26,7 +26,7 @@ echo -e "${GREEN}✓ .env ファイルを検出${NC}"
 # Qdrantコンテナ起動
 echo ""
 echo "[1/3] Qdrantコンテナ起動中..."
-docker-compose up -d
+docker compose up -d
 
 # 起動待機
 echo "  Qdrantの起動を待機中..."

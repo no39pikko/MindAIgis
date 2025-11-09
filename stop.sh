@@ -39,7 +39,7 @@ fi
 
 # Qdrantコンテナ停止
 echo "Qdrantコンテナ停止中..."
-docker-compose down
+docker compose down
 echo "✓ Qdrant停止完了"
 
 echo ""
