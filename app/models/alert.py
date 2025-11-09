@@ -47,3 +47,17 @@ class IntelligentSearchRequest(BaseModel):
                 "include_context": True
             }
         }
+
+
+class ProcedureAssistRequest(BaseModel):
+    """手順書作成補佐リクエスト（Phase 3）"""
+    task: str = Field(..., description="作業内容（例: FW設定Aの手順書を作りたい）")
+    context: Optional[str] = Field(None, description="追加コンテキスト（オプション）")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "task": "FW設定Aの手順書を作りたい",
+                "context": "新規サーバーへの展開で、既存FWも並行稼働中"
+            }
+        }

@@ -3,11 +3,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from app.models.alert import ZabbixAlert, AlertSearchRequest, IntelligentSearchRequest
+from app.models.alert import ZabbixAlert, AlertSearchRequest, IntelligentSearchRequest, ProcedureAssistRequest
 from app.models.ticket import SimilarTicket
 from app.services.vector_service import VectorService
 from app.services.redmine_service import RedmineService
 from app.services.intelligent_search import IntelligentSearchService
+from app.services.procedure_assistant_service import ProcedureAssistantService
 
 load_dotenv()
 
@@ -44,6 +45,20 @@ if intelligent_search_enabled:
         print("  Continuing without intelligent search features...")
 else:
     print("ℹ Intelligent Search Service disabled (set INTELLIGENT_SEARCH_ENABLED=true to enable)")
+
+# Phase 3: Procedure Assistant Service (環境変数で制御)
+procedure_assist_enabled = os.getenv("PROCEDURE_ASSIST_ENABLED", "false").lower() == "true"
+procedure_assistant_service = None
+
+if procedure_assist_enabled:
+    try:
+        procedure_assistant_service = ProcedureAssistantService()
+        print("✓ Procedure Assistant Service enabled")
+    except Exception as e:
+        print(f"✗ Failed to initialize Procedure Assistant Service: {e}")
+        print("  Continuing without procedure assist features...")
+else:
+    print("ℹ Procedure Assistant Service disabled (set PROCEDURE_ASSIST_ENABLED=true to enable)")
 
 
 @app.get("/")
@@ -207,6 +222,46 @@ async def intelligent_search(request: IntelligentSearchRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Intelligent search error: {str(e)}")
+
+
+@app.post("/assist/procedure")
+async def assist_procedure(request: ProcedureAssistRequest):
+    """
+    手順書作成補佐エンドポイント（Phase 3）
+
+    10年選手の先輩のように、手順書作成に必要な情報を提供する。
+
+    Args:
+        request: 手順書作成補佐リクエスト
+
+    Returns:
+        {
+            "search_strategies": [...],  # 検索戦略
+            "important_tickets": [...],  # 重要度順チケット
+            "cautions": [...],  # 注意事項
+            "pitfalls": [...],  # ハマりポイント
+            "references": [...],  # 参照すべき設定値等
+            "updates": [...],  # 既存システムの更新
+            "relationships": {...},  # チケット関係図
+            "summary": "..."  # 先輩風まとめ
+        }
+    """
+    if not procedure_assist_enabled or not procedure_assistant_service:
+        raise HTTPException(
+            status_code=503,
+            detail="Procedure assistant is not enabled. Set PROCEDURE_ASSIST_ENABLED=true and OPENAI_API_KEY in environment variables."
+        )
+
+    try:
+        result = procedure_assistant_service.assist(
+            query=request.task,
+            context=request.context
+        )
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Procedure assist error: {str(e)}")
 
 
 @app.post("/index/ticket/{ticket_id}")

@@ -11,8 +11,8 @@ API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 # ページ設定
 st.set_page_config(
-    page_title="MindAIgis - 保守AIアシスタント",
-    page_icon="🤖",
+    page_title="MindAIgis - 手順書作成補佐",
+    page_icon="👨‍🏫",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -20,119 +20,172 @@ st.set_page_config(
 # カスタムCSS
 st.markdown("""
 <style>
-    /* メインタイトルのスタイリング */
+    /* メインタイトル */
     .main-title {
-        font-size: 2.5rem;
+        font-size: 2.8rem;
         font-weight: 700;
-        background: linear-gradient(120deg, #1e88e5 0%, #00acc1 100%);
+        background: linear-gradient(120deg, #f39c12 0%, #e74c3c 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 0.5rem;
     }
 
     .subtitle {
-        font-size: 1.1rem;
-        color: #666;
+        font-size: 1.2rem;
+        color: #555;
         margin-bottom: 2rem;
     }
 
-    /* 検索ボックスのスタイリング */
-    .search-container {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    /* 先輩のアドバイスボックス */
+    .senior-advice {
+        background: linear-gradient(135deg, #f39c1215 0%, #e74c3c15 100%);
+        border-left: 5px solid #f39c12;
         padding: 2rem;
-        border-radius: 15px;
-        margin-bottom: 2rem;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        border-radius: 10px;
+        margin: 2rem 0;
+        font-size: 1.1rem;
+        line-height: 1.8;
     }
 
-    /* カード型チケット表示 */
+    .senior-advice h3 {
+        color: #f39c12;
+        margin-top: 0;
+        font-size: 1.3rem;
+    }
+
+    /* チケットカード */
     .ticket-card {
         background: white;
         border-radius: 12px;
         padding: 1.5rem;
-        margin-bottom: 1rem;
-        border-left: 4px solid #1e88e5;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        margin-bottom: 1.5rem;
+        border-left: 5px solid #3498db;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
         transition: all 0.3s ease;
     }
 
     .ticket-card:hover {
-        box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-        transform: translateY(-2px);
+        box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        transform: translateY(-3px);
     }
 
-    /* スコア表示 */
-    .score-badge {
-        display: inline-block;
-        padding: 0.3rem 0.8rem;
+    /* 重要度バッジ */
+    .priority-critical {
+        background: #e74c3c;
+        color: white;
+        padding: 0.4rem 1rem;
         border-radius: 20px;
-        font-weight: 600;
-        font-size: 0.85rem;
+        font-weight: 700;
+        font-size: 0.9rem;
     }
 
-    .score-high {
-        background: #4caf50;
+    .priority-high {
+        background: #f39c12;
         color: white;
+        padding: 0.4rem 1rem;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.9rem;
     }
 
-    .score-medium {
-        background: #ff9800;
+    .priority-medium {
+        background: #3498db;
         color: white;
+        padding: 0.4rem 1rem;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.9rem;
     }
 
-    .score-low {
-        background: #f44336;
+    .priority-low {
+        background: #95a5a6;
         color: white;
+        padding: 0.4rem 1rem;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.9rem;
     }
 
-    /* AI要約ボックス */
-    .ai-summary {
-        background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
-        border-left: 4px solid #667eea;
-        padding: 1.5rem;
-        border-radius: 8px;
-        margin: 1.5rem 0;
+    /* 注意事項・ハマりポイント */
+    .caution-box {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 1rem;
+        border-radius: 5px;
+        margin: 1rem 0;
     }
 
-    .ai-summary h3 {
-        color: #667eea;
-        margin-top: 0;
+    .pitfall-box {
+        background: #f8d7da;
+        border-left: 4px solid #dc3545;
+        padding: 1rem;
+        border-radius: 5px;
+        margin: 1rem 0;
     }
 
-    /* メタデータタグ */
-    .meta-tag {
+    .reference-box {
+        background: #d1ecf1;
+        border-left: 4px solid #17a2b8;
+        padding: 1rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+
+    /* タグ */
+    .tag {
         display: inline-block;
         background: #e3f2fd;
         color: #1976d2;
-        padding: 0.25rem 0.75rem;
-        border-radius: 12px;
+        padding: 0.3rem 0.8rem;
+        border-radius: 15px;
         font-size: 0.85rem;
         margin-right: 0.5rem;
         margin-bottom: 0.5rem;
     }
 
-    /* サイドバーのスタイル改善 */
-    .css-1d391kg {
-        background: #f8f9fa;
+    .tag-caution {
+        background: #fff3cd;
+        color: #856404;
     }
 
-    /* ボタンスタイル */
-    .stButton>button {
-        border-radius: 8px;
+    .tag-pitfall {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .tag-config {
+        background: #d1ecf1;
+        color: #0c5460;
+    }
+
+    /* チケットリンク */
+    .ticket-link {
+        color: #3498db;
         font-weight: 600;
-        transition: all 0.3s ease;
+        text-decoration: none;
+        border-bottom: 2px solid #3498db;
     }
 
-    /* プログレスバー */
-    .stProgress > div > div > div {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    .ticket-link:hover {
+        color: #2980b9;
+        border-bottom-color: #2980b9;
+    }
+
+    /* 関係図 */
+    .relationship-node {
+        background: #f8f9fa;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        margin: 0.5rem;
+        display: inline-block;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ヘッダー
-st.markdown('<h1 class="main-title">🤖 MindAIgis</h1>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">AI駆動型保守運用アシスタント - 過去の対応事例を自然言語で検索</p>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-title">👨‍🏫 MindAIgis</h1>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">手順書作成補佐システム - 10年選手の先輩があなたをサポート</p>', unsafe_allow_html=True)
 
 # サイドバー
 with st.sidebar:
@@ -145,20 +198,8 @@ with st.sidebar:
                 response = requests.get(f"{API_BASE_URL}/health", timeout=5)
                 if response.status_code == 200:
                     health = response.json()
-
-                    # API
                     st.metric("API", "🟢 正常" if health.get("api") == "healthy" else "🔴 異常")
-
-                    # Qdrant
-                    if health.get("qdrant") == "healthy":
-                        st.metric("Qdrant", "🟢 正常")
-                        if "qdrant_info" in health:
-                            info = health["qdrant_info"]
-                            st.caption(f"📊 {info.get('points_count', 0)} チケット")
-                    else:
-                        st.metric("Qdrant", "🔴 異常")
-
-                    # Redmine
+                    st.metric("Qdrant", "🟢 正常" if health.get("qdrant") == "healthy" else "🔴 異常")
                     st.metric("Redmine", "🟢 正常" if health.get("redmine") == "healthy" else "🔴 異常")
                 else:
                     st.error("接続エラー")
@@ -183,463 +224,293 @@ with st.sidebar:
 
     st.divider()
 
-    # クイックアクション
-    st.markdown("### ⚡ クイックアクション")
+    st.markdown("### 💡 使い方")
+    st.info("""
+    1. 作業内容を入力
+    2. 先輩がチケットを検索
+    3. 重要な注意点を教えてくれます
 
-    if st.button("📥 チケットインデックス", use_container_width=True):
-        st.session_state.show_index_modal = True
+    **例**: "FW設定Aの手順書を作りたい"
+    """)
 
-    if st.button("📚 ドキュメント", use_container_width=True):
-        st.info("Phase 2 README: docs/PHASE2_README.md")
+# メインコンテンツ
+st.markdown("## 📝 何の手順書を作りますか？")
 
-# メインタブ
-tab1, tab2, tab3 = st.tabs(["🤖 AI検索 (Phase 2)", "🔍 通常検索 (Phase 1)", "⚙️ 管理"])
+task_input = st.text_area(
+    "作業内容を入力してください",
+    placeholder="例:\n・FW設定Aの手順書を作りたい\n・新規サーバーへのミドルウェアインストール手順\n・データベース移行の手順書",
+    height=100,
+    key="task_input"
+)
 
-# =====================================
-# タブ1: AI検索（Phase 2）
-# =====================================
-with tab1:
-    st.markdown("### 💬 自然言語で過去の対応事例を検索")
-    st.caption("例: 「先月web-prod-01でディスク容量のアラートが出たときどう対応した？」")
+context_input = st.text_area(
+    "補足情報（オプション）",
+    placeholder="例: 新規サーバーへの展開で、既存FWも並行稼働中",
+    height=60,
+    key="context_input"
+)
 
-    # 検索フォーム
-    query = st.text_area(
-        "質問を入力してください",
-        placeholder="先月web-prod-01でディスク容量のアラートが出たときどう対応した？\n昨日のメモリ不足エラーの解決方法は？\n2024年10月のネットワーク障害について教えて",
-        height=100,
-        label_visibility="collapsed"
+col1, col2 = st.columns([3, 1])
+
+with col1:
+    assist_button = st.button(
+        "👨‍🏫 先輩に聞く",
+        type="primary",
+        use_container_width=True,
+        key="assist_btn"
     )
 
-    col1, col2, col3 = st.columns([2, 1, 1])
+with col2:
+    if st.button("🔄 クリア", use_container_width=True):
+        st.session_state.task_input = ""
+        st.session_state.context_input = ""
+        st.rerun()
 
-    with col1:
-        search_ai_button = st.button(
-            "🤖 AI検索を実行",
-            type="primary",
-            use_container_width=True,
-            key="ai_search_btn"
-        )
+# 補佐実行
+if assist_button and task_input:
+    with st.spinner("👨‍🏫 10年選手の先輩が考え中..."):
+        try:
+            response = requests.post(
+                f"{API_BASE_URL}/assist/procedure",
+                json={
+                    "task": task_input,
+                    "context": context_input if context_input else None
+                },
+                timeout=120
+            )
 
-    with col2:
-        ai_limit = st.selectbox(
-            "取得件数",
-            [5, 10, 15, 20],
-            index=1,
-            key="ai_limit"
-        )
+            if response.status_code == 200:
+                result = response.json()
 
-    with col3:
-        include_context = st.checkbox(
-            "外部データ取得",
-            value=True,
-            help="CMDB等の外部データを取得（有効な場合）"
-        )
+                # 先輩のアドバイス
+                summary = result.get("summary", "")
+                if summary:
+                    st.markdown("## 👨‍🏫 先輩からのアドバイス")
+                    st.markdown(f"""
+                    <div class="senior-advice">
+                        {summary.replace(chr(10), '<br>')}
+                    </div>
+                    """, unsafe_allow_html=True)
 
-    # AI検索実行
-    if search_ai_button and query:
-        with st.spinner("🤖 AIが過去の事例を分析中..."):
-            try:
-                response = requests.post(
-                    f"{API_BASE_URL}/search/intelligent",
-                    json={
-                        "query": query,
-                        "limit": ai_limit,
-                        "include_context": include_context
-                    },
-                    timeout=60
-                )
+                st.divider()
 
-                if response.status_code == 200:
-                    result = response.json()
+                # 検索戦略
+                strategies = result.get("search_strategies", [])
+                if strategies:
+                    with st.expander("🔍 検索した視点", expanded=False):
+                        for idx, strategy in enumerate(strategies, 1):
+                            st.markdown(f"**{idx}. {strategy.get('perspective', 'N/A')}**")
+                            st.caption(f"理由: {strategy.get('reason', 'N/A')}")
+                            st.caption(f"検索クエリ: {strategy.get('search_query', 'N/A')}")
+                            if idx < len(strategies):
+                                st.markdown("---")
 
-                    # クエリ分析結果
-                    with st.expander("🔍 クエリ解析結果", expanded=False):
-                        analysis = result.get("query_analysis", {})
+                st.divider()
 
-                        col_a, col_b, col_c = st.columns(3)
+                # 重要なチケット
+                important_tickets = result.get("important_tickets", [])
 
-                        with col_a:
-                            st.markdown("**🔑 抽出キーワード**")
-                            keywords = analysis.get("keywords", [])
-                            if keywords:
-                                for kw in keywords:
-                                    st.markdown(f'<span class="meta-tag">{kw}</span>', unsafe_allow_html=True)
-                            else:
-                                st.caption("なし")
+                if important_tickets:
+                    st.markdown("## 🎯 重要なチケット（重要度順）")
 
-                        with col_b:
-                            st.markdown("**🖥️ サーバー名**")
-                            servers = analysis.get("server_names", [])
-                            if servers:
-                                for srv in servers:
-                                    st.markdown(f'<span class="meta-tag">{srv}</span>', unsafe_allow_html=True)
-                            else:
-                                st.caption("なし")
+                    for idx, ticket in enumerate(important_tickets[:10], 1):
+                        ticket_id = ticket.get("ticket_id")
+                        subject = ticket.get("subject", "N/A")
+                        status = ticket.get("status", "N/A")
+                        similarity = ticket.get("similarity", 0) * 100
 
-                        with col_c:
-                            st.markdown("**📅 日付範囲**")
-                            date_range = analysis.get("date_range")
-                            if date_range:
-                                st.caption(f"{date_range.get('start')} 〜 {date_range.get('end')}")
-                            else:
-                                st.caption("指定なし")
+                        # 重要度の判定
+                        if idx == 1:
+                            priority_class = "priority-critical"
+                            priority_label = "最重要"
+                            emoji = "🔥"
+                        elif idx <= 3:
+                            priority_class = "priority-high"
+                            priority_label = "重要"
+                            emoji = "⚠️"
+                        elif idx <= 6:
+                            priority_class = "priority-medium"
+                            priority_label = "確認推奨"
+                            emoji = "📌"
+                        else:
+                            priority_class = "priority-low"
+                            priority_label = "参考"
+                            emoji = "📄"
 
-                    st.divider()
+                        with st.container():
+                            col_h1, col_h2, col_h3 = st.columns([4, 1, 1])
 
-                    # AI要約を大きく表示
-                    summary = result.get("summary", "")
-                    if summary:
-                        st.markdown("### 📋 AI要約")
-                        st.markdown(f"""
-                        <div class="ai-summary">
-                            {summary.replace(chr(10), '<br>')}
-                        </div>
-                        """, unsafe_allow_html=True)
+                            with col_h1:
+                                st.markdown(f"### {emoji} #{ticket_id} - {subject}")
 
-                    st.divider()
+                            with col_h2:
+                                st.markdown(f'<span class="{priority_class}">{priority_label}</span>', unsafe_allow_html=True)
 
-                    # 検索結果
-                    search_results = result.get("search_results", [])
-                    metadata = result.get("metadata", {})
+                            with col_h3:
+                                st.caption(f"類似度 {similarity:.1f}%")
 
-                    if search_results:
-                        st.markdown(f"### 🎯 関連チケット ({metadata.get('total_results', 0)}件)")
+                            # メタデータ
+                            meta_col1, meta_col2, meta_col3, meta_col4 = st.columns(4)
 
-                        for idx, ticket in enumerate(search_results, 1):
-                            similarity = ticket.get("similarity", 0)
-                            similarity_percent = similarity * 100
+                            with meta_col1:
+                                st.caption(f"📊 {status}")
 
-                            # スコアのスタイル決定
-                            if similarity_percent >= 80:
-                                score_class = "score-high"
-                                emoji = "🟢"
-                            elif similarity_percent >= 60:
-                                score_class = "score-medium"
-                                emoji = "🟡"
-                            else:
-                                score_class = "score-low"
-                                emoji = "🔴"
+                            with meta_col2:
+                                assigned = ticket.get("assigned_to", "N/A")
+                                st.caption(f"👤 {assigned}")
 
-                            with st.container():
-                                # チケットヘッダー
-                                col_h1, col_h2, col_h3 = st.columns([3, 1, 1])
-
-                                with col_h1:
-                                    st.markdown(f"#### {emoji} #{ticket.get('ticket_id')} - {ticket.get('subject')}")
-
-                                with col_h2:
-                                    st.markdown(f'<span class="{score_class} score-badge">類似度 {similarity_percent:.1f}%</span>', unsafe_allow_html=True)
-
-                                with col_h3:
-                                    comments_count = len(ticket.get("comments", []))
-                                    if comments_count > 0:
-                                        st.caption(f"💬 {comments_count} コメント")
-
-                                # メタデータ
-                                meta_col1, meta_col2, meta_col3, meta_col4 = st.columns(4)
-
-                                with meta_col1:
-                                    category = ticket.get("category", "N/A")
-                                    st.caption(f"📂 {category}")
-
-                                with meta_col2:
-                                    assigned = ticket.get("assigned_to", "N/A")
-                                    st.caption(f"👤 {assigned}")
-
-                                with meta_col3:
-                                    status = ticket.get("status", "N/A")
-                                    st.caption(f"📊 {status}")
-
-                                with meta_col4:
-                                    closed_on = ticket.get("closed_on")
-                                    if closed_on:
-                                        try:
-                                            dt = datetime.fromisoformat(closed_on.replace('Z', '+00:00'))
-                                            st.caption(f"📅 {dt.strftime('%Y-%m-%d')}")
-                                        except:
-                                            st.caption("📅 N/A")
-                                    else:
+                            with meta_col3:
+                                closed_on = ticket.get("closed_on")
+                                if closed_on:
+                                    try:
+                                        dt = datetime.fromisoformat(closed_on.replace('Z', '+00:00'))
+                                        st.caption(f"📅 {dt.strftime('%Y-%m-%d')}")
+                                    except:
                                         st.caption("📅 N/A")
+                                else:
+                                    st.caption("📅 進行中")
 
-                                # 類似度プログレスバー
-                                st.progress(similarity)
+                            with meta_col4:
+                                comments_count = len(ticket.get("comments", []))
+                                if comments_count > 0:
+                                    st.caption(f"💬 {comments_count}コメント")
 
-                                # 詳細展開
-                                with st.expander("📄 詳細を表示", expanded=(idx == 1)):
-                                    # サーバー名
-                                    server_names = ticket.get("server_names", [])
-                                    if server_names:
-                                        st.markdown("**🖥️ サーバー**")
-                                        for srv in server_names:
-                                            st.markdown(f'<span class="meta-tag">{srv}</span>', unsafe_allow_html=True)
+                            # タグ
+                            if ticket.get("has_cautions"):
+                                st.markdown('<span class="tag tag-caution">⚠️ 注意事項あり</span>', unsafe_allow_html=True)
 
-                                    # 説明
-                                    description = ticket.get("description", "")
-                                    if description:
-                                        st.markdown("**📝 問題の説明**")
-                                        st.info(description[:500] + ("..." if len(description) > 500 else ""))
+                            if ticket.get("has_pitfalls"):
+                                st.markdown('<span class="tag tag-pitfall">⛔ ハマりポイントあり</span>', unsafe_allow_html=True)
 
-                                    # 解決策
-                                    resolution = ticket.get("resolution", "")
-                                    if resolution:
-                                        st.markdown("**✅ 解決策**")
-                                        st.success(resolution[:500] + ("..." if len(resolution) > 500 else ""))
+                            if ticket.get("has_config_values"):
+                                st.markdown('<span class="tag tag-config">📋 設定値あり</span>', unsafe_allow_html=True)
 
-                                    # コメント
-                                    comments = ticket.get("comments", [])
-                                    if comments:
-                                        st.markdown(f"**💬 コメント ({len(comments)}件)**")
-                                        for comment in comments[:3]:  # 最初の3件のみ表示
-                                            user = comment.get("user", "Unknown")
-                                            created = comment.get("created_on", "")
-                                            notes = comment.get("notes", "")
+                            # 詳細
+                            with st.expander("📄 詳細を表示", expanded=(idx == 1)):
+                                # 注意事項
+                                if ticket.get("caution_summary"):
+                                    st.markdown("**⚠️ 注意事項**")
+                                    st.markdown(f"""
+                                    <div class="caution-box">
+                                        {ticket.get("caution_summary")}
+                                    </div>
+                                    """, unsafe_allow_html=True)
 
-                                            st.markdown(f"**{user}** - {created[:10] if created else 'N/A'}")
-                                            st.caption(notes[:200] + ("..." if len(notes) > 200 else ""))
-
-                                        if len(comments) > 3:
-                                            st.caption(f"... 他 {len(comments) - 3} 件のコメント")
-
-                                st.divider()
-                    else:
-                        st.warning("⚠️ 該当する事例が見つかりませんでした")
-
-                elif response.status_code == 503:
-                    st.error("❌ AI検索機能が無効です")
-                    st.info("""
-                    AI検索を有効にするには:
-                    1. `.env` に `INTELLIGENT_SEARCH_ENABLED=true` を設定
-                    2. `OPENAI_API_KEY` を設定
-                    3. APIサーバーを再起動
-                    """)
-                else:
-                    st.error(f"❌ エラー: {response.status_code}")
-                    st.code(response.text)
-
-            except requests.exceptions.Timeout:
-                st.error("❌ タイムアウト: AIの処理に時間がかかっています")
-            except Exception as e:
-                st.error(f"❌ エラー: {str(e)}")
-
-    elif search_ai_button:
-        st.warning("⚠️ 質問を入力してください")
-
-# =====================================
-# タブ2: 通常検索（Phase 1）
-# =====================================
-with tab2:
-    st.markdown("### 🔍 キーワードベクトル検索")
-    st.caption("アラートメッセージやエラー文で類似チケットを検索")
-
-    # 検索フォーム
-    alert_text = st.text_area(
-        "アラート内容を入力",
-        placeholder="例: disk usage over 90% on web-prod-01\nメモリ使用率が95%を超えました",
-        height=100,
-        key="basic_search_input"
-    )
-
-    col1, col2 = st.columns([3, 1])
-
-    with col1:
-        search_button = st.button(
-            "🔍 検索",
-            type="primary",
-            use_container_width=True,
-            key="basic_search_btn"
-        )
-
-    with col2:
-        search_limit = st.slider(
-            "検索件数",
-            min_value=1,
-            max_value=20,
-            value=5,
-            key="basic_limit"
-        )
-
-    # 検索実行
-    if search_button and alert_text:
-        with st.spinner("🔄 検索中..."):
-            try:
-                response = requests.post(
-                    f"{API_BASE_URL}/search",
-                    json={
-                        "alert_text": alert_text,
-                        "limit": search_limit
-                    },
-                    timeout=30
-                )
-
-                if response.status_code == 200:
-                    results = response.json()
-
-                    if not results:
-                        st.warning("⚠️ 類似チケットが見つかりませんでした")
-                    else:
-                        st.success(f"✅ {len(results)}件の類似チケットを発見")
-
-                        # 結果表示
-                        for idx, ticket in enumerate(results, 1):
-                            similarity_percent = ticket["similarity"] * 100
-
-                            # 類似度に応じた色分け
-                            if similarity_percent >= 80:
-                                color = "🟢"
-                            elif similarity_percent >= 60:
-                                color = "🟡"
-                            else:
-                                color = "🔴"
-
-                            with st.expander(
-                                f"{color} #{ticket['ticket_id']} - {ticket['subject']} "
-                                f"(類似度: {similarity_percent:.1f}%)",
-                                expanded=(idx == 1)
-                            ):
-                                # 類似度プログレスバー
-                                st.progress(ticket['similarity'])
-
-                                # チケット詳細
-                                col_a, col_b, col_c = st.columns(3)
-
-                                with col_a:
-                                    st.markdown("**📋 基本情報**")
-                                    st.write(f"チケットID: #{ticket['ticket_id']}")
-                                    st.write(f"カテゴリ: {ticket.get('category', 'N/A')}")
-                                    st.write(f"担当者: {ticket.get('assigned_to', 'N/A')}")
-
-                                with col_b:
-                                    st.markdown("**📅 日時情報**")
-                                    closed_on = ticket.get('closed_on')
-                                    if closed_on:
-                                        try:
-                                            closed_date = datetime.fromisoformat(closed_on.replace('Z', '+00:00'))
-                                            st.write(f"完了日: {closed_date.strftime('%Y-%m-%d %H:%M')}")
-                                        except:
-                                            st.write("完了日: N/A")
-                                    else:
-                                        st.write("完了日: N/A")
-                                    st.write(f"ステータス: {ticket.get('status', 'N/A')}")
-
-                                with col_c:
-                                    st.markdown("**🎯 類似度**")
-                                    st.metric("", f"{similarity_percent:.1f}%")
+                                # ハマりポイント
+                                if ticket.get("pitfall_summary"):
+                                    st.markdown("**⛔ ハマりポイント**")
+                                    st.markdown(f"""
+                                    <div class="pitfall-box">
+                                        {ticket.get("pitfall_summary")}
+                                    </div>
+                                    """, unsafe_allow_html=True)
 
                                 # 説明
-                                if ticket.get('description'):
+                                description = ticket.get("description", "")
+                                if description:
                                     st.markdown("**📝 説明**")
-                                    st.info(ticket['description'])
+                                    st.info(description[:500] + ("..." if len(description) > 500 else ""))
 
-                                # 解決策
-                                if ticket.get('resolution'):
+                                # 解決策・対応内容
+                                resolution = ticket.get("resolution", "")
+                                if resolution:
                                     st.markdown("**✅ 解決策・対応内容**")
-                                    st.success(ticket['resolution'])
-                                else:
-                                    st.warning("解決策が記録されていません")
+                                    st.success(resolution[:500] + ("..." if len(resolution) > 500 else ""))
 
-                else:
-                    st.error(f"❌ 検索エラー: {response.status_code}")
-                    st.code(response.text)
+                                # 重要コメント
+                                important_comments = ticket.get("important_comments", [])
+                                if important_comments:
+                                    st.markdown("**💡 重要なコメント**")
+                                    for comment in important_comments[:3]:
+                                        comment_type = comment.get("type", "")
+                                        user = comment.get("user", "Unknown")
+                                        comment_summary = comment.get("summary", "")
 
-            except requests.exceptions.Timeout:
-                st.error("❌ タイムアウト: APIサーバーの応答がありません")
-            except Exception as e:
-                st.error(f"❌ エラー: {str(e)}")
+                                        if comment_type == "caution":
+                                            st.warning(f"⚠️ **{user}**: {comment_summary}")
+                                        elif comment_type == "pitfall":
+                                            st.error(f"⛔ **{user}**: {comment_summary}")
+                                        elif comment_type == "config":
+                                            st.info(f"📋 **{user}**: {comment_summary}")
+                                        else:
+                                            st.caption(f"💬 **{user}**: {comment_summary}")
 
-    elif search_button:
-        st.warning("⚠️ アラート内容を入力してください")
+                                # サーバー名
+                                server_names = ticket.get("server_names", [])
+                                if server_names:
+                                    st.markdown("**🖥️ 関連サーバー**")
+                                    for srv in server_names:
+                                        st.markdown(f'<span class="tag">{srv}</span>', unsafe_allow_html=True)
 
-# =====================================
-# タブ3: 管理
-# =====================================
-with tab3:
-    st.markdown("### ⚙️ システム管理")
+                            st.divider()
 
-    # インデックス管理
-    st.markdown("#### 📥 チケットインデックス")
+                # 既存システムの更新
+                updates = result.get("updates", [])
+                if updates:
+                    st.markdown("## 🆕 既存システムの更新（要反映）")
+                    st.warning("⚠️ 以下の更新を新規設定にも反映する必要があります")
 
-    col1, col2 = st.columns(2)
+                    for update in updates:
+                        with st.container():
+                            col_u1, col_u2 = st.columns([3, 1])
 
-    with col1:
-        ticket_id_input = st.number_input(
-            "インデックスするチケットID",
-            min_value=1,
-            step=1,
-            help="RedmineのチケットIDを入力"
-        )
+                            with col_u1:
+                                st.markdown(f"**チケット#{update.get('ticket_id')}**")
+                                st.caption(f"{update.get('user')} - {update.get('created_on', 'N/A')[:10]}")
 
-        if st.button("📥 チケットをインデックス", type="primary", use_container_width=True):
-            if ticket_id_input:
-                with st.spinner(f"チケット #{ticket_id_input} をインデックス中..."):
-                    try:
-                        response = requests.post(
-                            f"{API_BASE_URL}/index/ticket/{ticket_id_input}",
-                            timeout=30
-                        )
+                            with col_u2:
+                                st.markdown('<span class="tag tag-caution">要反映</span>', unsafe_allow_html=True)
 
-                        if response.status_code == 200:
-                            result = response.json()
-                            st.success(f"✅ {result['message']}")
-                        elif response.status_code == 404:
-                            st.error("❌ チケットが見つかりません")
-                        else:
-                            st.error(f"❌ エラー: {response.status_code}")
-                            st.code(response.text)
+                            st.info(update.get("content", ""))
 
-                    except Exception as e:
-                        st.error(f"❌ エラー: {str(e)}")
+                    st.divider()
 
-    with col2:
-        delete_ticket_id = st.number_input(
-            "削除するチケットID",
-            min_value=1,
-            step=1,
-            key="delete_ticket"
-        )
+                # チケット関係図
+                relationships = result.get("relationships", {})
+                related = relationships.get("related", [])
+                references = relationships.get("references", {})
 
-        if st.button("🗑️ インデックスから削除", type="secondary", use_container_width=True):
-            if delete_ticket_id:
-                with st.spinner(f"チケット #{delete_ticket_id} を削除中..."):
-                    try:
-                        response = requests.delete(
-                            f"{API_BASE_URL}/index/ticket/{delete_ticket_id}",
-                            timeout=10
-                        )
+                if related or references:
+                    with st.expander("🔗 チケット間の関係", expanded=False):
+                        if related:
+                            st.markdown("**関連チケット**")
+                            for rel in related[:10]:
+                                st.caption(f"チケット#{rel.get('from')} → #{rel.get('to')} ({rel.get('type', 'N/A')})")
 
-                        if response.status_code == 200:
-                            result = response.json()
-                            st.success(f"✅ {result['message']}")
-                        else:
-                            st.error(f"❌ エラー: {response.status_code}")
+                        if references:
+                            st.markdown("**コメント内参照**")
+                            for ticket_id, refs in list(references.items())[:5]:
+                                st.caption(f"チケット#{ticket_id} → {', '.join([f'#{r}' for r in refs])}")
 
-                    except Exception as e:
-                        st.error(f"❌ エラー: {str(e)}")
+            elif response.status_code == 503:
+                st.error("❌ 手順書作成補佐機能が無効です")
+                st.info("""
+                補佐機能を有効にするには:
+                1. `.env` に `PROCEDURE_ASSIST_ENABLED=true` を設定
+                2. `OPENAI_API_KEY` を設定
+                3. APIサーバーを再起動
+                """)
+            else:
+                st.error(f"❌ エラー: {response.status_code}")
+                st.code(response.text)
 
-    st.divider()
+        except requests.exceptions.Timeout:
+            st.error("❌ タイムアウト: 処理に時間がかかっています（大量のチケットを分析中かもしれません）")
+        except Exception as e:
+            st.error(f"❌ エラー: {str(e)}")
 
-    # バッチインデックス
-    st.markdown("#### 🔄 バッチ処理")
-    st.info("""
-    **全チケットの再インデックス**
-
-    Phase 2ではコメント（ジャーナル）も検索対象になります。
-    既存のチケットを再インデックスすることを推奨します。
-
-    コマンド:
-    ```bash
-    python scripts/reindex_tickets_with_comments.py
-    ```
-    """)
+elif assist_button:
+    st.warning("⚠️ 作業内容を入力してください")
 
 # フッター
 st.divider()
 col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
 
 with col_f1:
-    st.caption("🤖 MindAIgis v2.0.0")
+    st.caption("👨‍🏫 MindAIgis v3.0.0")
 
 with col_f2:
-    st.caption("Phase 2: AI検索対応")
+    st.caption("Phase 3: 手順書作成補佐")
 
 with col_f3:
-    st.caption("Powered by OpenAI + Qdrant")
+    st.caption("10年選手の先輩があなたをサポート")
