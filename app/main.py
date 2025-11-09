@@ -3,10 +3,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from app.models.alert import ZabbixAlert, AlertSearchRequest
+from app.models.alert import ZabbixAlert, AlertSearchRequest, IntelligentSearchRequest
 from app.models.ticket import SimilarTicket
 from app.services.vector_service import VectorService
 from app.services.redmine_service import RedmineService
+from app.services.intelligent_search import IntelligentSearchService
 
 load_dotenv()
 
@@ -29,6 +30,20 @@ app.add_middleware(
 # サービスの初期化
 vector_service = VectorService()
 redmine_service = RedmineService()
+
+# Phase 2: Intelligent Search Service (環境変数で制御)
+intelligent_search_enabled = os.getenv("INTELLIGENT_SEARCH_ENABLED", "false").lower() == "true"
+intelligent_search_service = None
+
+if intelligent_search_enabled:
+    try:
+        intelligent_search_service = IntelligentSearchService()
+        print("✓ Intelligent Search Service enabled")
+    except Exception as e:
+        print(f"✗ Failed to initialize Intelligent Search Service: {e}")
+        print("  Continuing without intelligent search features...")
+else:
+    print("ℹ Intelligent Search Service disabled (set INTELLIGENT_SEARCH_ENABLED=true to enable)")
 
 
 @app.get("/")
@@ -154,6 +169,44 @@ async def search_similar_tickets(request: AlertSearchRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+
+
+@app.post("/search/intelligent")
+async def intelligent_search(request: IntelligentSearchRequest):
+    """
+    自然言語クエリ検索エンドポイント（Phase 2）
+
+    自然言語でチケットを検索し、LLMによる事実ベースの要約を返す。
+
+    Args:
+        request: 自然言語検索リクエスト
+
+    Returns:
+        {
+            "query_analysis": {...},  # パースされたクエリ
+            "search_results": [...],  # 検索結果
+            "summary": "...",         # 事実ベース要約
+            "context": {...},         # 外部データ
+            "metadata": {...}         # メタデータ
+        }
+    """
+    if not intelligent_search_enabled or not intelligent_search_service:
+        raise HTTPException(
+            status_code=503,
+            detail="Intelligent search is not enabled. Set INTELLIGENT_SEARCH_ENABLED=true and OPENAI_API_KEY in environment variables."
+        )
+
+    try:
+        result = intelligent_search_service.search(
+            query=request.query,
+            limit=request.limit,
+            include_context=request.include_context
+        )
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Intelligent search error: {str(e)}")
 
 
 @app.post("/index/ticket/{ticket_id}")

@@ -218,3 +218,87 @@ class RedmineService:
         except Exception as e:
             print(f"Failed to connect to Redmine: {e}")
             return False
+
+    def get_ticket_details_with_comments(self, ticket_id: int) -> Optional[dict]:
+        """
+        チケットの詳細情報をコメント付きで取得（Phase 2拡張機能）
+
+        Args:
+            ticket_id: チケットID
+
+        Returns:
+            チケット情報（コメントリスト含む）
+        """
+        issue = self.get_ticket(ticket_id)
+        if not issue:
+            return None
+
+        # すべてのジャーナル（コメント）を取得
+        comments = []
+        if hasattr(issue, 'journals') and issue.journals:
+            for journal in issue.journals:
+                if hasattr(journal, 'notes') and journal.notes:
+                    comments.append({
+                        "user": getattr(journal.user, 'name', 'Unknown') if hasattr(journal, 'user') else 'Unknown',
+                        "created_on": journal.created_on.isoformat() if hasattr(journal, 'created_on') else None,
+                        "notes": journal.notes
+                    })
+
+        # サーバー名を説明文とコメントから抽出
+        full_text = issue.subject + " " + getattr(issue, 'description', '')
+        for comment in comments:
+            full_text += " " + comment.get("notes", "")
+
+        server_names = self._extract_server_names(full_text)
+
+        return {
+            "ticket_id": issue.id,
+            "subject": issue.subject,
+            "description": getattr(issue, 'description', '') or '',
+            "resolution": comments[-1]["notes"] if comments else "",  # 最後のコメントを解決策とする
+            "comments": comments,
+            "server_names": server_names,
+            "category": getattr(issue.category, 'name', None) if hasattr(issue, 'category') else None,
+            "assigned_to": getattr(issue.assigned_to, 'name', None) if hasattr(issue, 'assigned_to') else None,
+            "status": issue.status.name if hasattr(issue, 'status') else None,
+            "priority": issue.priority.name if hasattr(issue, 'priority') else None,
+            "created_on": issue.created_on.isoformat() if hasattr(issue, 'created_on') else None,
+            "updated_on": issue.updated_on.isoformat() if hasattr(issue, 'updated_on') else None,
+            "closed_on": issue.closed_on.isoformat() if hasattr(issue, 'closed_on') else None,
+            "tracker": issue.tracker.name if hasattr(issue, 'tracker') else None,
+            "project": issue.project.name if hasattr(issue, 'project') else None,
+        }
+
+    def _extract_server_names(self, text: str) -> List[str]:
+        """
+        テキストからサーバー名を抽出（簡易パターンマッチング）
+
+        Args:
+            text: 検索対象テキスト
+
+        Returns:
+            サーバー名のリスト
+        """
+        import re
+
+        if not text:
+            return []
+
+        # サーバー名パターン（環境に合わせてカスタマイズ可能）
+        patterns = [
+            r'\b[a-z]+-[a-z]+-\d+\b',  # web-prod-01形式
+            r'\b[a-z]+[_-][a-z]+[_-]\d+\b',  # web_prod_01形式
+            r'\b[a-z]+\d+\b',          # server01形式
+            r'\b[a-z]+-\d+\b',         # web-01形式
+        ]
+
+        server_names = set()
+        for pattern in patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            server_names.update(matches)
+
+        # 一般的すぎる単語を除外（環境に応じて調整）
+        exclude_words = {'localhost', 'admin', 'user', 'root', 'test', 'example'}
+        server_names = {name.lower() for name in server_names if name.lower() not in exclude_words}
+
+        return list(server_names)
