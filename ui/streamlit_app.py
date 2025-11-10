@@ -322,22 +322,20 @@ def display_results(result: dict):
     recommendations = result.get("recommendations", "")
     tickets = result.get("analyzed_tickets", [])
     tickets_found = result.get("tickets_found", 0)
-    task_keywords = result.get("task_keywords", "")
     search_process = result.get("search_process", {})
     relationships = result.get("relationships", {})
 
     # 検索プロセス表示（デバッグ情報）
-    if task_keywords or search_process:
+    if search_process:
         with st.expander("🔍 検索プロセス（デバッグ情報）", expanded=False):
-            st.markdown(f"**抽出キーワード:** {task_keywords}")
-            if search_process:
-                st.markdown(f"**初回検索:** {search_process.get('initial_query')} → {search_process.get('initial_count')}件")
-                additional = search_process.get('additional_queries', [])
-                if additional:
-                    st.markdown(f"**追加検索:**")
-                    for aq in additional:
-                        st.markdown(f"  - {aq}")
-                st.markdown(f"**最終結果:** {search_process.get('total_count')}件")
+            st.markdown(f"**初回検索クエリ:** {search_process.get('initial_query')}")
+            st.markdown(f"**初回検索結果:** {search_process.get('initial_count')}件")
+            additional = search_process.get('additional_queries', [])
+            if additional:
+                st.markdown(f"**LLMが提案した追加検索:**")
+                for aq in additional:
+                    st.markdown(f"  - {aq}")
+            st.markdown(f"**最終結果:** {search_process.get('total_count')}件")
 
     # 統計情報
     st.markdown(f"""

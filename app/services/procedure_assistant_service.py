@@ -1,12 +1,13 @@
 """
 手順書作成補佐サービス（Phase 3）
 
-Consensus風の反復的検索・分析アプローチ:
-1. 作業内容そのもので検索
-2. 結果を読んで理解
-3. さらに調べるべきことを特定
-4. 追加検索を実行
-5. 全体を統合
+正しいRAG + Consensus風アプローチ:
+1. LLMでクエリ分析（キーワード抽出、メタデータ抽出）
+2. キーワードをベクトル化して検索（embed_text → ベクトル → Qdrant）
+3. 取得したチケットの内容をLLMに読ませて分析
+4. LLMが「さらに調べるべきこと」を提案
+5. 追加検索
+6. 統合
 """
 
 import re
@@ -29,12 +30,13 @@ class ProcedureAssistantService:
         """
         手順書作成を補佐
 
-        Consensus風の反復的アプローチ:
-        1. 作業内容を抽出して初回検索
-        2. 結果を分析
-        3. 追加で調べるべきことを特定
-        4. 追加検索を実行
-        5. 全体を統合
+        正しいRAG:
+        1. LLMでクエリ分析（キーワード抽出）
+        2. キーワードをベクトル化して検索
+        3. チケット内容をLLMに読ませる
+        4. LLMが「さらに調べるべきこと」を提案
+        5. 追加検索
+        6. 統合
 
         Args:
             query: 作業内容
@@ -43,33 +45,40 @@ class ProcedureAssistantService:
         Returns:
             分析結果と具体的な推奨事項
         """
-        print(f"\n=== 手順書作成補佐（反復的検索） ===")
+        print(f"\n=== 手順書作成補佐（正しいRAG） ===")
         print(f"Query: {query}")
 
-        # [Step 1] 作業内容を抽出
-        print("\n[1/5] 作業内容を抽出中...")
-        task_keywords = self._extract_task_keywords(query, context)
-        print(f"  抽出キーワード: {task_keywords}")
+        # [Step 1] LLMでクエリ分析（キーワード抽出）
+        print("\n[1/5] クエリを分析中...")
+        query_analysis = self._analyze_query(query, context)
+        search_keywords = query_analysis.get("keywords", query)
+        print(f"  抽出キーワード: {search_keywords}")
 
-        # [Step 2] 初回検索（作業内容そのもの）
-        print("\n[2/5] 初回検索中...")
-        initial_tickets = self._search_tickets(task_keywords, limit=10)
+        # [Step 2] キーワードをベクトル化して初回検索
+        # vector_service.search_similar_tickets() は内部で embed_text() を呼ぶ
+        print("\n[2/5] 初回検索（キーワードをベクトル化）...")
+        print(f"  検索キーワード: {search_keywords}")
+        initial_tickets = self._search_tickets(search_keywords, limit=15, score_threshold=0.25)
         print(f"  初回検索結果: {len(initial_tickets)}件")
 
-        # 0件の場合はフォールバック
+        # 0件の場合はthresholdを下げて再検索
         if len(initial_tickets) == 0:
-            print("  → フォールバック検索（threshold=0）...")
-            initial_tickets = self._search_tickets(task_keywords, limit=10, score_threshold=0.0)
-            print(f"  フォールバック結果: {len(initial_tickets)}件")
+            print("  → threshold=0で再検索...")
+            initial_tickets = self._search_tickets(search_keywords, limit=15, score_threshold=0.0)
+            print(f"  再検索結果: {len(initial_tickets)}件")
 
-        # [Step 3] 初回結果を分析して、追加で調べるべきことを特定
-        print("\n[3/5] 初回結果を分析し、追加調査項目を特定中...")
-        additional_queries = self._identify_additional_searches(
-            query, context, initial_tickets, task_keywords
-        )
-        print(f"  追加調査項目: {len(additional_queries)}個")
-        for aq in additional_queries:
-            print(f"    - {aq}")
+        # [Step 3] チケット内容をLLMに読ませて、追加で調べるべきことを特定
+        print("\n[3/5] チケット内容を分析し、追加調査項目を特定中...")
+        additional_queries = []
+        if initial_tickets:
+            additional_queries = self._analyze_tickets_and_identify_gaps(
+                query, context, initial_tickets
+            )
+            print(f"  追加調査項目: {len(additional_queries)}個")
+            for aq in additional_queries:
+                print(f"    - {aq}")
+        else:
+            print("  初回検索結果がないため、追加調査をスキップ")
 
         # [Step 4] 追加検索を実行
         print("\n[4/5] 追加検索を実行中...")
@@ -106,9 +115,8 @@ class ProcedureAssistantService:
             context=context,
             tickets=analyzed_tickets,
             relationships=relationships,
-            task_keywords=task_keywords,
             search_process={
-                "initial_query": task_keywords,
+                "initial_query": search_keywords,
                 "initial_count": len(initial_tickets),
                 "additional_queries": additional_queries,
                 "total_count": len(all_tickets)
@@ -120,12 +128,11 @@ class ProcedureAssistantService:
         return {
             "query": query,
             "context": context,
-            "task_keywords": task_keywords,
             "tickets_found": len(all_tickets),
             "analyzed_tickets": analyzed_tickets,
             "relationships": relationships,
             "search_process": {
-                "initial_query": task_keywords,
+                "initial_query": search_keywords,
                 "initial_count": len(initial_tickets),
                 "additional_queries": additional_queries,
                 "total_count": len(all_tickets)
@@ -133,37 +140,51 @@ class ProcedureAssistantService:
             "recommendations": recommendations
         }
 
-    def _extract_task_keywords(self, query: str, context: Optional[str] = None) -> str:
+    def _analyze_query(self, query: str, context: Optional[str] = None) -> Dict:
         """
-        ユーザーのクエリから作業内容のキーワードを抽出
-        「DNS設定変更の手順書を作りたい」→「DNS設定変更」
+        LLMでクエリを分析
+
+        Phase 2のアプローチ:
+        - キーワード抽出（ノイズ除去）
+        - 時間フィルタ（あれば）
+        - サーバーフィルタ（あれば）
         """
         context_str = f"\n\n追加コンテキスト: {context}" if context else ""
 
-        prompt = f"""以下のユーザーの要求から、作業内容のキーワードだけを抽出してください。
+        prompt = f"""以下のユーザーの要求を分析してください。
 
 【ユーザーの要求】
 {query}{context_str}
 
-抽出するのは:
-- 作業内容そのもの（例: DNS設定変更、FW設定A、サーバー移行）
-- 「手順書」「作成」「作りたい」などは除外
-- 簡潔に、検索に使えるキーワードのみ
+以下を抽出してください:
+
+1. keywords: 検索キーワード（作業内容そのもの）
+   - 「手順書」「作成」「作りたい」などは除外
+   - 作業の核心部分のみ
+
+2. time_filter: 時間フィルタ（あれば）
+   - 「先月」「最近」など → 具体的な日付範囲
+   - なければ null
+
+3. server_filter: サーバー名フィルタ（あれば）
+   - 「web-prod-01」など
+   - なければ null
 
 JSON形式で出力:
 ```json
 {{
-  "keywords": "作業内容のキーワード"
+  "keywords": "DNS設定変更",
+  "time_filter": null,
+  "server_filter": null
 }}
 ```
 
 例:
 - 入力: "DNS設定変更の手順書を作成したい"
-  出力: {{"keywords": "DNS設定変更"}}
-- 入力: "FW設定Aの手順書を作りたい"
-  出力: {{"keywords": "FW設定A"}}
-- 入力: "Webサーバーのログ解析方法"
-  出力: {{"keywords": "Webサーバー ログ解析"}}
+  出力: {{"keywords": "DNS設定変更", "time_filter": null, "server_filter": null}}
+
+- 入力: "先月のweb-prod-01でのディスク容量アラートの対応手順"
+  出力: {{"keywords": "ディスク容量アラート 対応", "time_filter": "2024-10", "server_filter": "web-prod-01"}}
 """
 
         try:
@@ -175,69 +196,73 @@ JSON形式で出力:
             )
 
             import json
-            result = json.loads(response.choices[0].message.content)
-            return result.get("keywords", query)
+            return json.loads(response.choices[0].message.content)
 
         except Exception as e:
-            print(f"  キーワード抽出エラー: {e}")
-            # フォールバック: 「手順書」「作成」などを除外
-            fallback = query.replace("手順書", "").replace("作成", "").replace("作りたい", "").replace("を", "").replace("の", "").strip()
-            return fallback
+            print(f"  クエリ分析エラー: {e}")
+            # フォールバック: そのまま使う
+            return {"keywords": query, "time_filter": None, "server_filter": None}
 
-    def _identify_additional_searches(
+    def _analyze_tickets_and_identify_gaps(
         self,
         query: str,
         context: Optional[str],
-        initial_tickets: List[Dict],
-        task_keywords: str
+        tickets: List[Dict]
     ) -> List[str]:
         """
-        初回検索結果を分析して、追加で調べるべきことを特定
-        Consensusのように、結果を読んで次に何を調べるべきか考える
+        チケット内容を読んで、さらに調べるべきことを特定
+
+        Consensusのキモ：
+        - 検索結果の「タイトル」だけじゃなく「内容」を読む
+        - その上で「さらに調べるべきこと」を提案
         """
-        if not initial_tickets:
-            # 初回検索が0件の場合は、広範な検索を試みる
-            return [
-                task_keywords + " 設定",
-                task_keywords + " トラブル",
-                task_keywords + " 変更"
-            ]
+        # チケットの内容を要約（タイトルだけじゃなく、説明文も含める）
+        tickets_content = []
+        for ticket in tickets[:5]:  # 上位5件を詳細に見る
+            ticket_id = ticket.get('ticket_id')
+            subject = ticket.get('subject', '')
+            description = ticket.get('description', '')[:500]  # 最大500文字
 
-        # 初回検索結果の概要を作成
-        tickets_summary = []
-        for ticket in initial_tickets[:5]:
-            tickets_summary.append(f"#{ticket.get('ticket_id')}: {ticket.get('subject')}")
+            tickets_content.append(f"""
+チケット#{ticket_id}: {subject}
+{description}
+""".strip())
 
-        summary_text = "\n".join(tickets_summary)
+        content_text = "\n\n".join(tickets_content)
         context_str = f"\n\n追加コンテキスト: {context}" if context else ""
 
-        prompt = f"""以下の作業について手順書を作成するために、初回検索で以下のチケットが見つかりました。
+        prompt = f"""あなたは運用保守のエキスパートです。以下の作業について手順書を作成するために、初回検索で以下のチケットが見つかりました。
 
 【作業内容】
 {query}{context_str}
 
-【初回検索キーワード】
-{task_keywords}
+【見つかったチケット（上位5件の内容）】
+{content_text}
 
-【見つかったチケット（上位5件）】
-{summary_text}
+これらのチケットの内容を読んで、手順書作成のためにさらに調べるべきことを3つ提案してください。
 
-これらのチケットを見て、手順書作成のためにさらに調べるべきことを3つ提案してください。
+考え方:
+1. チケットに出てくるキーワード・システム名・設定項目から、関連する情報を探す
+2. トラブルや失敗が言及されていれば、その詳細を調べる
+3. 「前提条件」「影響範囲」「関連システム」など、手順書に必要な情報を補完する
 
-考慮すべき観点:
-1. トラブルや失敗事例（「{task_keywords} トラブル」など）
-2. 関連するシステムや設定（例: DNSなら「ネームサーバー」「ゾーンファイル」など）
-3. 既存システムへの影響（「{task_keywords} 影響」など）
-4. 前提条件や準備（「{task_keywords} 準備」など）
+例:
+- チケットに「DNSサーバーを変更」とあれば → 「DNSサーバー 設定」
+- チケットに「ゾーンファイルの編集」とあれば → 「ゾーンファイル」
+- チケットに「キャッシュクリアが必要」とあれば → 「キャッシュクリア」
+
+重要:
+- 検索キーワードとして使えるもの（ベクトル化される）
+- 短く、具体的に
+- 「手順書」「作成」などは含めない
 
 JSON形式で出力:
 ```json
 {{
-  "additional_queries": ["検索クエリ1", "検索クエリ2", "検索クエリ3"]
+  "additional_queries": ["検索クエリ1", "検索クエリ2", "検索クエリ3"],
+  "reasoning": "なぜこれらを調べるべきか（簡潔に）"
 }}
 ```
-
-重要: 「手順書」「作成」などは含めず、作業内容に関連するキーワードのみ。
 """
 
         try:
@@ -250,19 +275,21 @@ JSON形式で出力:
 
             import json
             result = json.loads(response.choices[0].message.content)
+
+            print(f"  LLMの判断: {result.get('reasoning', '')}")
+
             return result.get("additional_queries", [])
 
         except Exception as e:
             print(f"  追加調査項目の特定エラー: {e}")
-            # フォールバック: 基本的な追加検索
-            return [
-                task_keywords + " トラブル",
-                task_keywords + " 設定"
-            ]
+            return []
 
-    def _search_tickets(self, query: str, limit: int = 10, score_threshold: float = 0.3) -> List[Dict]:
+    def _search_tickets(self, query: str, limit: int = 10, score_threshold: float = 0.25) -> List[Dict]:
         """
-        シンプルなベクトル検索
+        ベクトル検索
+
+        内部で embed_text() が呼ばれ、OpenAI Embedding APIでベクトル化される:
+        query → embed_text() → [0.15, -0.42, ...] → Qdrant検索
         """
         try:
             tickets = self.vector_service.search_similar_tickets(
@@ -506,11 +533,10 @@ JSON形式で出力:
         context: Optional[str],
         tickets: List[Dict],
         relationships: Dict,
-        task_keywords: str,
         search_process: Dict
     ) -> str:
         """
-        総合的な推奨を生成（反復的検索の結果を統合）
+        総合的な推奨を生成
         """
         if not tickets:
             return self._generate_no_results_recommendation(query, context)
@@ -539,9 +565,9 @@ JSON形式で出力:
 {query}{context_str}
 
 【検索プロセス】
-- 初回検索キーワード: {task_keywords}
+- 初回検索キーワード: {search_process.get('initial_query')}
 - 初回検索結果: {search_process.get('initial_count')}件
-- 追加検索: {', '.join(search_process.get('additional_queries', []))}
+- 追加検索: {len(search_process.get('additional_queries', []))}回
 - 最終的に見つかったチケット: {search_process.get('total_count')}件
 
 【重要なチケット（上位5件）】
@@ -587,45 +613,21 @@ JSON形式で出力:
         """
         検索結果がない場合の推奨
         """
-        context_str = f"\n\n追加コンテキスト: {context}" if context else ""
+        return f"""
+検索の結果、「{query}」に関連するチケットが見つかりませんでした。
 
-        prompt = f"""以下の作業について、Redmineで類似チケットを検索しましたが、該当するチケットが見つかりませんでした。
+考えられる理由:
+1. Redmineにまだこの作業のチケットが登録されていない（新規作業）
+2. Qdrantにデータがインデックスされていない
+3. 検索の類似度閾値が高すぎる
 
-【作業内容】
-{query}{context_str}
+次のステップ:
+1. Redmineで手動検索してみる（Web UIから）
+2. 類似する作業や関連システムのキーワードで検索してみる
+3. 過去の担当者に確認する
+4. この作業を詳細に記録して、将来の参考資料とする
 
-このような場合に、ユーザーに提供すべきアドバイスを生成してください：
-
-1. なぜ該当チケットが見つからなかったか（新規作業、検索語の問題など）
-2. 代替アプローチ（より広範な検索、類似作業の検索、担当者への確認など）
-3. 手順書作成に向けた次のステップ
-
-自然な文章で、400-600文字程度。
-"""
-
-        try:
-            response = self.llm_service.provider.client.chat.completions.create(
-                model=self.llm_service.provider.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.5,
-                max_tokens=1000
-            )
-
-            return response.choices[0].message.content
-
-        except Exception as e:
-            print(f"  推奨生成エラー: {e}")
-            return f"""
-検索の結果、「{query}」に直接該当するチケットは見つかりませんでした。
-
-これは新規の作業である可能性が高いです。以下のアプローチを試してください：
-
-1. より広範な検索語で類似作業を探す
-2. 関連するシステムやコンポーネントのチケットを確認
-3. 過去の担当者や詳しい方に確認する
-4. 既存のシステム構成を参照する
-
-手順書を作成する際は、今回の作業を詳細に記録し、将来の参考資料として残すことをお勧めします。
+Qdrantのデータ確認: curl http://localhost:6333/collections/maintenance_tickets
 """
 
     def _generate_fallback_recommendation(self, tickets: List[Dict]) -> str:
@@ -633,7 +635,7 @@ JSON形式で出力:
         LLM生成失敗時のフォールバック
         """
         if not tickets:
-            return "該当するチケットが見つかりませんでした。検索条件を広げるか、関連する作業を探してみてください。"
+            return "該当するチケットが見つかりませんでした。"
 
         top_3 = tickets[:3]
         lines = ["検索の結果、以下のチケットが見つかりました：\n"]
