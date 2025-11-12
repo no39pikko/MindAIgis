@@ -69,11 +69,11 @@ def main():
         limit = int(os.getenv("INDEX_LIMIT", "100"))
         print(f"   取得上限: {limit}件")
 
-        # チケット検索（完了済みのチケット）
+        # チケット検索（全ステータス、更新日降順）
         # Redmine APIを直接使用
         project_id = os.getenv("REDMINE_PROJECT_ID")
         params = {
-            'status_id': 'closed',  # 完了済み
+            'status_id': '*',  # 全ステータス
             'limit': limit,
             'sort': 'updated_on:desc'  # 更新日時の降順
         }
@@ -81,10 +81,31 @@ def main():
         if project_id:
             params['project_id'] = project_id
 
-        issues = redmine_service.redmine.issue.filter(**params)
-        tickets = list(issues)
+        # まずチケットIDのリストを取得
+        print(f"   Redmine API に接続中...")
+        issues_list = redmine_service.redmine.issue.filter(**params)
 
-        print(f"   ✓ {len(tickets)}件のチケットを取得")
+        # イテレータを安全にリスト化
+        issue_ids = []
+        for issue in issues_list:
+            issue_ids.append(issue.id)
+            if len(issue_ids) >= limit:
+                break
+
+        print(f"   ✓ {len(issue_ids)}件のチケットIDを取得")
+
+        # 各チケットを個別に取得（journalsを含む）
+        tickets = []
+        for idx, issue_id in enumerate(issue_ids, 1):
+            if idx % 10 == 1:
+                print(f"   詳細取得中: {idx}/{len(issue_ids)}")
+            try:
+                issue = redmine_service.redmine.issue.get(issue_id, include='journals')
+                tickets.append(issue)
+            except Exception as e:
+                print(f"   ⚠ チケット#{issue_id}の取得失敗: {e}")
+
+        print(f"   ✓ {len(tickets)}件のチケット詳細を取得")
         print()
 
         if not tickets:
@@ -111,13 +132,15 @@ def main():
 
     for idx, issue in enumerate(tickets, 1):
         ticket_id = issue.id
-        subject = getattr(issue, 'subject', '')
-        description = getattr(issue, 'description', '')
+        subject = getattr(issue, 'subject', '') or ''
+        description = getattr(issue, 'description', '') or ''
 
         # 解決策（最後のコメント）を取得
         resolution = ""
         if hasattr(issue, 'journals') and issue.journals:
-            for journal in reversed(issue.journals):
+            # journalsをリスト化してから逆順にする
+            journals_list = list(issue.journals)
+            for journal in reversed(journals_list):
                 if hasattr(journal, 'notes') and journal.notes:
                     resolution = journal.notes
                     break
