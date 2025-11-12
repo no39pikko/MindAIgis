@@ -90,6 +90,9 @@ class RedmineService:
         try:
             params = {}
 
+            # 全ステータスのチケットを取得
+            params['status_id'] = '*'
+
             # limitは必須（デフォルト100）
             params['limit'] = limit if limit else 100
 
