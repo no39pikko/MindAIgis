@@ -78,7 +78,7 @@ class RedmineService:
 
     def get_closed_tickets(self, limit: Optional[int] = None, offset: int = 0) -> List[Issue]:
         """
-        全ステータスのチケットを取得（クローズ済み以外も含む）
+        チケットを取得（status_id指定なし = Redmineのデフォルト動作）
 
         Args:
             limit: 取得件数上限（Noneの場合は全件）
@@ -89,7 +89,6 @@ class RedmineService:
         """
         try:
             params = {
-                'status_id': '*',  # 全ステータス（Closed限定ではなく全件）
                 'sort': 'updated_on:desc',
                 'offset': offset
             }
