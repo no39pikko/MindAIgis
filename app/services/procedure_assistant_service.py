@@ -292,11 +292,17 @@ JSON形式で出力:
         query → embed_text() → [0.15, -0.42, ...] → Qdrant検索
         """
         try:
+            print(f"  DEBUG: ベクトル検索実行 - query='{query}', threshold={score_threshold}, limit={limit}")
             tickets = self.vector_service.search_similar_tickets(
                 alert_message=query,
                 limit=limit,
                 score_threshold=score_threshold
             )
+            print(f"  DEBUG: Qdrant検索結果 - {len(tickets)}件")
+
+            if tickets:
+                for t in tickets[:3]:  # 最初の3件のスコアを表示
+                    print(f"    - チケット#{t.get('ticket_id')}: 類似度={t.get('similarity', 0):.3f}")
 
             # Redmineから詳細取得
             enriched = []
@@ -309,10 +315,13 @@ JSON形式で出力:
                         **detail
                     })
 
+            print(f"  DEBUG: Redmine詳細取得完了 - {len(enriched)}件")
             return enriched
 
         except Exception as e:
             print(f"  検索エラー: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def _analyze_relationships(self, ticket_ids: Set[int]) -> Dict:

@@ -268,9 +268,9 @@ class RedmineService:
             "assigned_to": getattr(issue.assigned_to, 'name', None) if hasattr(issue, 'assigned_to') else None,
             "status": issue.status.name if hasattr(issue, 'status') else None,
             "priority": issue.priority.name if hasattr(issue, 'priority') else None,
-            "created_on": issue.created_on.isoformat() if hasattr(issue, 'created_on') else None,
-            "updated_on": issue.updated_on.isoformat() if hasattr(issue, 'updated_on') else None,
-            "closed_on": issue.closed_on.isoformat() if hasattr(issue, 'closed_on') else None,
+            "created_on": issue.created_on.isoformat() if hasattr(issue, 'created_on') and issue.created_on else None,
+            "updated_on": issue.updated_on.isoformat() if hasattr(issue, 'updated_on') and issue.updated_on else None,
+            "closed_on": issue.closed_on.isoformat() if hasattr(issue, 'closed_on') and issue.closed_on else None,
             "tracker": issue.tracker.name if hasattr(issue, 'tracker') else None,
             "project": issue.project.name if hasattr(issue, 'project') else None,
         }
