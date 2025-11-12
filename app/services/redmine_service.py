@@ -78,7 +78,7 @@ class RedmineService:
 
     def get_closed_tickets(self, limit: Optional[int] = None, offset: int = 0) -> List[Issue]:
         """
-        クローズ済みチケットを取得
+        全ステータスのチケットを取得（クローズ済み以外も含む）
 
         Args:
             limit: 取得件数上限（Noneの場合は全件）
@@ -89,7 +89,7 @@ class RedmineService:
         """
         try:
             params = {
-                'status_id': 'closed',
+                'status_id': '*',  # 全ステータス（Closed限定ではなく全件）
                 'sort': 'updated_on:desc',
                 'offset': offset
             }
@@ -109,12 +109,12 @@ class RedmineService:
             return list(issues)
 
         except Exception as e:
-            print(f"Error fetching closed tickets: {e}")
+            print(f"Error fetching tickets: {e}")
             return []
 
     def get_all_closed_tickets_iter(self, batch_size: int = 100):
         """
-        すべてのクローズ済みチケットをイテレータで取得（大量データ対応）
+        すべてのチケットをイテレータで取得（全ステータス、大量データ対応）
 
         Args:
             batch_size: 1回のAPIコールで取得する件数
