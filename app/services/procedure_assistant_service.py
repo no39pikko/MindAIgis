@@ -45,27 +45,75 @@ class ProcedureAssistantService:
         Returns:
             分析結果と具体的な推奨事項
         """
-        print(f"\n=== 手順書作成補佐（正しいRAG） ===")
+        print(f"\n=== 手順書作成補佐（複数視点検索） ===")
         print(f"Query: {query}")
 
-        # [Step 1] LLMでクエリ分析（キーワード抽出）
-        print("\n[1/5] クエリを分析中...")
+        # [Step 1] LLMでクエリ分析（複数の検索クエリ生成）
+        print("\n[1/5] クエリを分析中（複数視点の検索クエリを生成）...")
         query_analysis = self._analyze_query(query, context)
-        search_keywords = query_analysis.get("keywords", query)
-        print(f"  抽出キーワード: {search_keywords}")
+        search_queries = query_analysis.get("search_queries", [{"query": query, "reason": "デフォルト"}])
 
-        # [Step 2] キーワードをベクトル化して初回検索
-        # vector_service.search_similar_tickets() は内部で embed_text() を呼ぶ
-        print("\n[2/5] 初回検索（キーワードをベクトル化）...")
-        print(f"  検索キーワード: {search_keywords}")
-        initial_tickets = self._search_tickets(search_keywords, limit=15, score_threshold=0.3)
-        print(f"  初回検索結果: {len(initial_tickets)}件")
+        print(f"  生成された検索クエリ: {len(search_queries)}個")
+        for sq in search_queries:
+            print(f"    - 「{sq.get('query')}」（{sq.get('reason')}）")
+
+        # [Step 2] 各クエリでベクトル検索を実行
+        print("\n[2/5] 複数視点で初回検索中...")
+        all_tickets = []
+        tickets_dict = {}  # ticket_id -> ticket のマップ
+
+        for idx, sq in enumerate(search_queries, 1):
+            search_query = sq.get('query')
+            reason = sq.get('reason')
+            print(f"\n  [{idx}/{len(search_queries)}] 「{search_query}」で検索中...")
+
+            tickets = self._search_tickets(search_query, limit=10, score_threshold=0.3)
+            print(f"    → {len(tickets)}件")
+
+            # 重複チケットには視点を追加、新規チケットは追加
+            new_count = 0
+            duplicate_count = 0
+            for ticket in tickets:
+                tid = ticket.get("ticket_id")
+                if tid not in tickets_dict:
+                    # 新規チケット
+                    ticket["found_by_perspectives"] = [{"query": search_query, "reason": reason}]
+                    all_tickets.append(ticket)
+                    tickets_dict[tid] = ticket
+                    new_count += 1
+                else:
+                    # 既存チケット - 視点を追加
+                    existing = tickets_dict[tid]
+                    existing["found_by_perspectives"].append({"query": search_query, "reason": reason})
+                    duplicate_count += 1
+
+            if new_count > 0:
+                print(f"    → 新規: {new_count}件")
+            if duplicate_count > 0:
+                print(f"    → 既存チケットに視点追加: {duplicate_count}件")
+
+        print(f"\n  統合結果: 合計 {len(all_tickets)}件（重複除外済み）")
 
         # 0件の場合はthresholdを下げて再検索
-        if len(initial_tickets) == 0:
-            print("  → threshold=0.1で再検索...")
-            initial_tickets = self._search_tickets(search_keywords, limit=15, score_threshold=0.1)
-            print(f"  再検索結果: {len(initial_tickets)}件")
+        if len(all_tickets) == 0:
+            print("\n  → 結果が0件のため、threshold=0.1で再検索...")
+            for idx, sq in enumerate(search_queries[:3], 1):  # 上位3つのクエリのみ
+                search_query = sq.get('query')
+                reason = sq.get('reason')
+                print(f"  [{idx}] 「{search_query}」で再検索...")
+                tickets = self._search_tickets(search_query, limit=10, score_threshold=0.1)
+                for ticket in tickets:
+                    tid = ticket.get("ticket_id")
+                    if tid not in tickets_dict:
+                        ticket["found_by_perspectives"] = [{"query": search_query, "reason": reason}]
+                        all_tickets.append(ticket)
+                        tickets_dict[tid] = ticket
+                    else:
+                        existing = tickets_dict[tid]
+                        existing["found_by_perspectives"].append({"query": search_query, "reason": reason})
+            print(f"  再検索結果: 合計 {len(all_tickets)}件")
+
+        initial_tickets = all_tickets
 
         # [Step 3] チケット内容をLLMに読ませて、追加で調べるべきことを特定
         print("\n[3/5] チケット内容を分析し、追加調査項目を特定中...")
@@ -82,21 +130,34 @@ class ProcedureAssistantService:
 
         # [Step 4] 追加検索を実行
         print("\n[4/5] 追加検索を実行中...")
-        all_tickets = initial_tickets.copy()
-        seen_ids = {t.get("ticket_id") for t in initial_tickets}
+        # all_ticketsとtickets_dictを引き継ぐ
 
         for add_query in additional_queries[:3]:  # 最大3つまで
             print(f"  検索: {add_query}")
             additional_tickets = self._search_tickets(add_query, limit=5, score_threshold=0.3)
 
-            # 重複を除いて追加
+            # 重複チケットには視点を追加、新規チケットは追加
+            new_count = 0
+            duplicate_count = 0
             for ticket in additional_tickets:
                 tid = ticket.get("ticket_id")
-                if tid not in seen_ids:
+                if tid not in tickets_dict:
+                    ticket["found_by_perspectives"] = [{"query": add_query, "reason": "追加検索"}]
                     all_tickets.append(ticket)
-                    seen_ids.add(tid)
+                    tickets_dict[tid] = ticket
+                    new_count += 1
+                else:
+                    existing = tickets_dict[tid]
+                    existing["found_by_perspectives"].append({"query": add_query, "reason": "追加検索"})
+                    duplicate_count += 1
 
-            print(f"    → {len(additional_tickets)}件（重複除外後 合計{len(all_tickets)}件）")
+            msg = f"    → {len(additional_tickets)}件"
+            if new_count > 0:
+                msg += f"（新規{new_count}件）"
+            if duplicate_count > 0:
+                msg += f"（視点追加{duplicate_count}件）"
+            msg += f" 合計{len(all_tickets)}件"
+            print(msg)
 
         # 関係性分析
         relationships = {"related": [], "parent_child": {}, "references": {}}
@@ -116,7 +177,7 @@ class ProcedureAssistantService:
             tickets=analyzed_tickets,
             relationships=relationships,
             search_process={
-                "initial_query": search_keywords,
+                "initial_queries": [sq.get('query') for sq in search_queries],
                 "initial_count": len(initial_tickets),
                 "additional_queries": additional_queries,
                 "total_count": len(all_tickets)
@@ -132,7 +193,8 @@ class ProcedureAssistantService:
             "analyzed_tickets": analyzed_tickets,
             "relationships": relationships,
             "search_process": {
-                "initial_query": search_keywords,
+                "initial_queries": [sq.get('query') for sq in search_queries],
+                "perspectives": [{"query": sq.get('query'), "reason": sq.get('reason')} for sq in search_queries],
                 "initial_count": len(initial_tickets),
                 "additional_queries": additional_queries,
                 "total_count": len(all_tickets)
@@ -142,66 +204,96 @@ class ProcedureAssistantService:
 
     def _analyze_query(self, query: str, context: Optional[str] = None) -> Dict:
         """
-        LLMでクエリを分析
+        LLMでクエリを分析し、複数の検索クエリを生成
 
-        Phase 2のアプローチ:
-        - キーワード抽出（ノイズ除去）
-        - 時間フィルタ（あれば）
-        - サーバーフィルタ（あれば）
+        人間の運用員のように、複数の視点・キーワードで検索する
         """
         context_str = f"\n\n追加コンテキスト: {context}" if context else ""
 
-        prompt = f"""以下のユーザーの要求を分析してください。
+        prompt = f"""あなたは経験豊富な運用エンジニアです。以下のユーザーの要求を分析し、過去のチケットを検索するための複数の検索クエリを生成してください。
 
 【ユーザーの要求】
 {query}{context_str}
 
-以下を抽出してください:
+以下のJSONフォーマットで出力してください：
 
-1. keywords: 検索キーワード（作業内容そのもの）
-   - 「手順書」「作成」「作りたい」などは除外
-   - 作業の核心部分のみ
-
-2. time_filter: 時間フィルタ（あれば）
-   - 「先月」「最近」など → 具体的な日付範囲
-   - なければ null
-
-3. server_filter: サーバー名フィルタ（あれば）
-   - 「web-prod-01」など
-   - なければ null
-
-JSON形式で出力:
 ```json
 {{
-  "keywords": "DNS設定変更",
-  "time_filter": null,
-  "server_filter": null
+  "search_queries": [
+    {{"query": "検索クエリ1", "reason": "理由"}},
+    {{"query": "検索クエリ2", "reason": "理由"}},
+    ...
+  ],
+  "time_filter": "時間範囲（あれば）",
+  "server_filter": "サーバー名（あれば）"
 }}
 ```
 
-例:
-- 入力: "DNS設定変更の手順書を作成したい"
-  出力: {{"keywords": "DNS設定変更", "time_filter": null, "server_filter": null}}
+【検索クエリ生成の指針】
+1. メインキーワードを抽出（「手順書」「作成」などのノイズは除外）
+2. 具体的な数字・識別子がある場合は個別クエリを作成
+   例: "1系と2系" → "1系", "2系"
+3. 同義語・関連語も考慮
+   例: "DNS" → "ネームサーバー", "名前解決"
+4. 作業種別のバリエーション
+   例: "設定変更" → "設定", "変更作業", "更改"
+5. 通常3〜7個のクエリを生成
 
-- 入力: "先月のweb-prod-01でのディスク容量アラートの対応手順"
-  出力: {{"keywords": "ディスク容量アラート 対応", "time_filter": "2024-10", "server_filter": "web-prod-01"}}
+【例1】
+入力: "DNSの設定変更作業が知りたい 直近でDNSの1系と2系の作業はありませんか"
+出力:
+{{
+  "search_queries": [
+    {{"query": "DNS設定変更", "reason": "メインキーワード"}},
+    {{"query": "DNS 1系", "reason": "システム構成の詳細"}},
+    {{"query": "DNS 2系", "reason": "システム構成の詳細"}},
+    {{"query": "ネームサーバー", "reason": "DNSの同義語"}},
+    {{"query": "DNS 直近", "reason": "時間的な絞り込み"}}
+  ],
+  "time_filter": null,
+  "server_filter": null
+}}
+
+【例2】
+入力: "先月のweb-prod-01でのディスク容量アラート対応"
+出力:
+{{
+  "search_queries": [
+    {{"query": "ディスク容量アラート", "reason": "メインキーワード"}},
+    {{"query": "ディスク容量 web-prod-01", "reason": "サーバー指定"}},
+    {{"query": "ディスク 肥大化", "reason": "関連する問題"}},
+    {{"query": "容量不足", "reason": "同義の問題"}}
+  ],
+  "time_filter": "先月",
+  "server_filter": "web-prod-01"
+}}
 """
 
         try:
             response = self.llm_service.provider.client.chat.completions.create(
                 model=self.llm_service.provider.model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.2,
+                temperature=0.3,  # 少し創造性を持たせる
                 response_format={"type": "json_object"}
             )
 
             import json
-            return json.loads(response.choices[0].message.content)
+            result = json.loads(response.choices[0].message.content)
+
+            # フォーマット検証
+            if "search_queries" not in result or not result["search_queries"]:
+                raise ValueError("search_queries が空")
+
+            return result
 
         except Exception as e:
             print(f"  クエリ分析エラー: {e}")
-            # フォールバック: そのまま使う
-            return {"keywords": query, "time_filter": None, "server_filter": None}
+            # フォールバック: 単一クエリ
+            return {
+                "search_queries": [{"query": query, "reason": "フォールバック"}],
+                "time_filter": None,
+                "server_filter": None
+            }
 
     def _analyze_tickets_and_identify_gaps(
         self,
@@ -550,13 +642,18 @@ JSON形式で出力:
         if not tickets:
             return self._generate_no_results_recommendation(query, context)
 
-        # 上位5件の詳細情報を準備
+        # 上位5件の詳細情報を準備（視点情報も含む）
         top_tickets_info = []
         for ticket in tickets[:5]:
+            # どの視点から見つかったか
+            perspectives = ticket.get('found_by_perspectives', [])
+            perspectives_str = ", ".join([f"「{p.get('query')}」({p.get('reason')})" for p in perspectives])
+
             info = f"""
 チケット#{ticket.get('ticket_id')}: {ticket.get('subject')}
 重要度: {ticket.get('importance_score')}/100
 理由: {ticket.get('importance_reason')}
+見つかった視点: {perspectives_str}
 要約: {ticket.get('ai_summary')}
 主なポイント: {', '.join(ticket.get('key_points', [])[:3]) if ticket.get('key_points') else 'なし'}
 注意点: {', '.join(ticket.get('cautions', [])[:2]) if ticket.get('cautions') else 'なし'}
@@ -567,41 +664,51 @@ JSON形式で出力:
 
         context_str = f"\n\n追加コンテキスト: {context}" if context else ""
 
+        # 検索クエリの情報
+        initial_queries = search_process.get('initial_queries', [])
+        initial_queries_str = "、".join([f"「{q}」" for q in initial_queries]) if initial_queries else search_process.get('initial_query', '不明')
+
         prompt = f"""あなたは運用保守のエキスパートAIアシスタントです。
 以下の作業について手順書を作成しようとしているユーザーに、具体的で実用的なアドバイスを提供してください。
 
 【作業内容】
 {query}{context_str}
 
-【検索プロセス】
-- 初回検索キーワード: {search_process.get('initial_query')}
+【検索プロセス（複数視点検索）】
+- 生成された検索クエリ: {initial_queries_str}
 - 初回検索結果: {search_process.get('initial_count')}件
 - 追加検索: {len(search_process.get('additional_queries', []))}回
 - 最終的に見つかったチケット: {search_process.get('total_count')}件
 
 【重要なチケット（上位5件）】
+各チケットには「見つかった視点」が含まれています。複数の視点で見つかったチケットは特に重要です。
 {tickets_summary}
 
 【チケット間の関係】
 - 関連チケット: {len(relationships.get('related', []))}件
 - 参照されているチケット: {len(relationships.get('references', {}))}件
 
-以下の形式で、自然な文章でアドバイスを生成してください：
+以下の形式で回答してください：
 
-1. 全体状況の説明（見つかったチケットから何が分かるか）
-2. 最も重要なチケットとその具体的な内容
-3. 注意すべき点やトラブル事例（チケットの具体的な内容を引用）
-4. 参照すべき情報（設定値、既存システムなど）
-5. 次に確認すべきこと
+## 【要約】（2-3行で全体像を簡潔に）
+
+## 【チェックすべきチケットとポイント】
+各チケットについて、以下の形式で箇条書き：
+
+• **チケット#XX: タイトル** （重要度: XX点）
+  - **この視点から重要**: 〇〇の視点から、△△という理由で重要
+  - **別の視点から重要**: □□の視点から、◇◇という理由でも参照すべき（複数視点の場合）
+  - **具体的なポイント**: ～～という設定値／～～というトラブル事例／～～という注意点
+  - **参照箇所**: コメントXX番／説明文の～～の部分
 
 要求:
-- テンプレート的な文章ではなく、チケットの具体的な内容を踏まえた自然な説明
-- 「チケット#XXXでは、〇〇という問題が発生し、△△という対処をしています」のように具体的に
-- 箇条書きだけでなく、文章で流れるように説明
-- ユーザーが次に何をすべきか明確に
-- 専門的すぎず、分かりやすく
+- 「見つかった視点」を活用して、なぜそのチケットが重要なのか視点ごとに説明
+- 複数の視点で見つかったチケットは特に強調
+- 単なる要約ではなく、具体的な設定値やトラブル内容を引用
+- どのコメントや説明文のどこを見るべきか明示
+- テンプレート的ではなく、チケットの具体的な内容に基づいた説明
 
-800-1200文字程度で。
+800-1500文字程度で。
 """
 
         try:

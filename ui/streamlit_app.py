@@ -327,15 +327,31 @@ def display_results(result: dict):
 
     # 検索プロセス表示（デバッグ情報）
     if search_process:
-        with st.expander("🔍 検索プロセス（デバッグ情報）", expanded=False):
-            st.markdown(f"**初回検索クエリ:** {search_process.get('initial_query')}")
+        with st.expander("🔍 検索プロセス（複数視点検索）", expanded=True):
+            # 初回検索クエリ（複数）
+            initial_queries = search_process.get('initial_queries', [])
+            perspectives = search_process.get('perspectives', [])
+
+            if perspectives:
+                st.markdown("**🎯 生成された検索視点:**")
+                for p in perspectives:
+                    st.markdown(f"  - 「**{p.get('query')}**」 ← {p.get('reason')}")
+            elif initial_queries:
+                st.markdown(f"**初回検索クエリ:** {', '.join(initial_queries)}")
+            else:
+                # 後方互換性
+                st.markdown(f"**初回検索クエリ:** {search_process.get('initial_query', '不明')}")
+
             st.markdown(f"**初回検索結果:** {search_process.get('initial_count')}件")
+
+            # 追加検索
             additional = search_process.get('additional_queries', [])
             if additional:
-                st.markdown(f"**LLMが提案した追加検索:**")
+                st.markdown(f"**🔍 LLMが提案した追加検索:**")
                 for aq in additional:
                     st.markdown(f"  - {aq}")
-            st.markdown(f"**最終結果:** {search_process.get('total_count')}件")
+
+            st.markdown(f"**✅ 最終結果:** {search_process.get('total_count')}件")
 
     # 統計情報
     st.markdown(f"""
@@ -399,7 +415,15 @@ def display_ticket_card(ticket: dict, index: int):
     references = ticket.get("references", [])
     status = ticket.get("status", "")
     similarity = ticket.get("similarity", 0)
-    found_by = ticket.get("found_by_perspective", "")
+
+    # 複数の視点を取得
+    found_by_perspectives = ticket.get("found_by_perspectives", [])
+    if found_by_perspectives:
+        # 複数視点を結合
+        found_by = ", ".join([p.get('reason', '不明') for p in found_by_perspectives])
+    else:
+        # 後方互換性（古いデータ対応）
+        found_by = ticket.get("found_by_perspective", "")
 
     # 重要度バッジ
     if importance_score >= 90:
@@ -446,6 +470,13 @@ def display_ticket_card(ticket: dict, index: int):
 
     # 展開式の詳細情報
     with st.expander(f"チケット#{ticket_id} の詳細を表示", expanded=False):
+        # 検索視点の詳細（複数の場合）
+        if found_by_perspectives and len(found_by_perspectives) > 1:
+            st.markdown("**🔍 このチケットが見つかった検索視点**")
+            for p in found_by_perspectives:
+                st.markdown(f"- 「**{p.get('query')}**」 ← {p.get('reason')}")
+            st.markdown("---")
+
         # 重要度の理由
         if importance_reason:
             st.markdown(f"**重要度評価**")
