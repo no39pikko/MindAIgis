@@ -88,10 +88,14 @@ class RedmineService:
             チケットのリスト
         """
         try:
-            params = {
-                'sort': 'updated_on:desc',
-                'offset': offset
-            }
+            params = {}
+
+            # limitは必須（デフォルト100）
+            params['limit'] = limit if limit else 100
+
+            # offsetがある場合のみ追加
+            if offset > 0:
+                params['offset'] = offset
 
             # プロジェクト指定がある場合
             if self.project_id:
@@ -101,11 +105,11 @@ class RedmineService:
             if self.tracker_id:
                 params['tracker_id'] = self.tracker_id
 
-            if limit:
-                params['limit'] = limit
-
+            print(f"DEBUG: Redmine API params: {params}")  # デバッグ用
             issues = self.redmine.issue.filter(**params)
-            return list(issues)
+            result = list(issues)
+            print(f"DEBUG: Got {len(result)} tickets")  # デバッグ用
+            return result
 
         except Exception as e:
             print(f"Error fetching tickets: {e}")
