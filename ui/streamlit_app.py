@@ -7,6 +7,10 @@ import streamlit as st
 import requests
 import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# .envファイルを読み込む
+load_dotenv()
 
 # ページ設定
 st.set_page_config(
@@ -252,6 +256,7 @@ st.markdown("""
 
 # API設定
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+REDMINE_URL = os.getenv("REDMINE_URL", "http://your-redmine-server.com")
 
 def main():
     # ヘッダー
@@ -525,8 +530,7 @@ def display_ticket_card(ticket: dict, index: int):
                     st.info(f"他 {len(comments) - 5} 件のコメントがあります")
 
         # Redmineリンク
-        redmine_url = os.getenv("REDMINE_URL", "http://your-redmine-server.com")
-        st.markdown(f"[Redmineで開く]({redmine_url}/issues/{ticket_id})")
+        st.markdown(f"[Redmineで開く]({REDMINE_URL}/issues/{ticket_id})")
 
 
 if __name__ == "__main__":
