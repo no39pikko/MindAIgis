@@ -13,8 +13,8 @@ class RedmineService:
     def __init__(self):
         self.redmine_url = os.getenv("REDMINE_URL")
         self.api_key = os.getenv("REDMINE_API_KEY")
-        self.project_id = os.getenv("REDMINE_PROJECT_ID", "infrastructure")
-        self.tracker_id = int(os.getenv("REDMINE_TRACKER_ID", "1"))
+        self.project_id = os.getenv("REDMINE_PROJECT_ID")  # デフォルト値なし
+        self.tracker_id = int(os.getenv("REDMINE_TRACKER_ID")) if os.getenv("REDMINE_TRACKER_ID") else None
 
         if not self.redmine_url or not self.api_key:
             raise ValueError("REDMINE_URL and REDMINE_API_KEY must be set in environment variables")
