@@ -668,55 +668,34 @@ JSON形式で出力:
         initial_queries = search_process.get('initial_queries', [])
         initial_queries_str = "、".join([f"「{q}」" for q in initial_queries]) if initial_queries else search_process.get('initial_query', '不明')
 
-        prompt = f"""あなたは運用保守のエキスパートAIアシスタントです。
-以下の作業について手順書を作成しようとしているユーザーに、具体的で実用的なアドバイスを提供してください。
+        prompt = f"""【作業】{query}
 
-【作業内容】
-{query}{context_str}
-
-【検索プロセス（複数視点検索）】
-- 生成された検索クエリ: {initial_queries_str}
-- 初回検索結果: {search_process.get('initial_count')}件
-- 追加検索: {len(search_process.get('additional_queries', []))}回
-- 最終的に見つかったチケット: {search_process.get('total_count')}件
-
-【重要なチケット（上位5件）】
-各チケットには「見つかった視点」が含まれています。複数の視点で見つかったチケットは特に重要です。
+【見つかったチケット】
 {tickets_summary}
 
-【チケット間の関係】
-- 関連チケット: {len(relationships.get('related', []))}件
-- 参照されているチケット: {len(relationships.get('references', {}))}件
+以下の形式で、業務用に簡潔に出力してください：
 
-以下の形式で回答してください：
-
-## 【要約】（2-3行で全体像を簡潔に）
-
-## 【チェックすべきチケットとポイント】
-各チケットについて、以下の形式で箇条書き：
-
-• **チケット#XX: タイトル** （重要度: XX点）
-  - **この視点から重要**: 〇〇の視点から、△△という理由で重要
-  - **別の視点から重要**: □□の視点から、◇◇という理由でも参照すべき（複数視点の場合）
-  - **具体的なポイント**: ～～という設定値／～～というトラブル事例／～～という注意点
-  - **参照箇所**: コメントXX番／説明文の～～の部分
+チケット#XX: タイトル（重要度XX点）
+→ 見るべき箇所: コメントX番、説明文の〇〇
+→ 重要な理由: △△という設定値/トラブル事例
+→ 検索視点: 「XX」「YY」でヒット
 
 要求:
-- 「見つかった視点」を活用して、なぜそのチケットが重要なのか視点ごとに説明
-- 複数の視点で見つかったチケットは特に強調
-- 単なる要約ではなく、具体的な設定値やトラブル内容を引用
-- どのコメントや説明文のどこを見るべきか明示
-- テンプレート的ではなく、チケットの具体的な内容に基づいた説明
+- 各チケット3-4行以内
+- 「見るべき箇所」は具体的に（コメント番号、説明文のどこ）
+- 「重要な理由」は1行で端的に（設定値やトラブル内容を具体的に）
+- 複数視点でヒットしたチケットは視点を全て列挙
+- まとめ文章不要、箇条書きのみ
 
-800-1500文字程度で。
+300-500文字程度。
 """
 
         try:
             response = self.llm_service.provider.client.chat.completions.create(
                 model=self.llm_service.provider.model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.5,
-                max_tokens=2000
+                temperature=0.3,
+                max_tokens=800
             )
 
             return response.choices[0].message.content
