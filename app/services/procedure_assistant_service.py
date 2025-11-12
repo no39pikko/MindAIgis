@@ -58,13 +58,13 @@ class ProcedureAssistantService:
         # vector_service.search_similar_tickets() は内部で embed_text() を呼ぶ
         print("\n[2/5] 初回検索（キーワードをベクトル化）...")
         print(f"  検索キーワード: {search_keywords}")
-        initial_tickets = self._search_tickets(search_keywords, limit=15, score_threshold=0.25)
+        initial_tickets = self._search_tickets(search_keywords, limit=15, score_threshold=0.3)
         print(f"  初回検索結果: {len(initial_tickets)}件")
 
         # 0件の場合はthresholdを下げて再検索
         if len(initial_tickets) == 0:
-            print("  → threshold=0で再検索...")
-            initial_tickets = self._search_tickets(search_keywords, limit=15, score_threshold=0.0)
+            print("  → threshold=0.1で再検索...")
+            initial_tickets = self._search_tickets(search_keywords, limit=15, score_threshold=0.1)
             print(f"  再検索結果: {len(initial_tickets)}件")
 
         # [Step 3] チケット内容をLLMに読ませて、追加で調べるべきことを特定
@@ -87,7 +87,7 @@ class ProcedureAssistantService:
 
         for add_query in additional_queries[:3]:  # 最大3つまで
             print(f"  検索: {add_query}")
-            additional_tickets = self._search_tickets(add_query, limit=5, score_threshold=0.2)
+            additional_tickets = self._search_tickets(add_query, limit=5, score_threshold=0.3)
 
             # 重複を除いて追加
             for ticket in additional_tickets:
@@ -284,7 +284,7 @@ JSON形式で出力:
             print(f"  追加調査項目の特定エラー: {e}")
             return []
 
-    def _search_tickets(self, query: str, limit: int = 10, score_threshold: float = 0.25) -> List[Dict]:
+    def _search_tickets(self, query: str, limit: int = 10, score_threshold: float = 0.3) -> List[Dict]:
         """
         ベクトル検索
 

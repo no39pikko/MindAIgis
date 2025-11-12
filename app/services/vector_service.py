@@ -40,7 +40,7 @@ class VectorService:
                         distance=Distance.COSINE
                     ),
                     optimizers_config=OptimizersConfigDiff(
-                        indexing_threshold=0  # すぐにインデックス化
+                        indexing_threshold=1  # 1件からインデックス化
                     )
                 )
                 print(f"Collection '{self.collection_name}' created successfully")
@@ -128,7 +128,7 @@ class VectorService:
         self,
         alert_message: str,
         limit: int = 5,
-        score_threshold: float = 0.7
+        score_threshold: float = 0.3
     ) -> List[dict]:
         """
         類似チケット検索
